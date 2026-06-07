@@ -19,6 +19,9 @@ module Clauditor
       "haiku-4-5" => { input: 1.0, output: 5.0 },
     }.freeze
 
+    # Display order for model families: least to most capable/expensive.
+    FAMILY_ORDER = %w[haiku sonnet opus].freeze
+
     CACHE_READ_MULTIPLIER = 0.1
     CACHE_WRITE_5M_MULTIPLIER = 1.25
     CACHE_WRITE_1H_MULTIPLIER = 2.0
@@ -41,6 +44,14 @@ module Clauditor
 
     def known?(model)
       RATES.key?(normalize_model(model))
+    end
+
+    # Sort key ordering models by family (haiku < sonnet < opus) then version
+    # ascending, so `opus-4-7` precedes `opus-4-8`. Unknown families sort last,
+    # alphabetically.
+    def sort_key(model)
+      family, *version = normalize_model(model).split("-")
+      [ FAMILY_ORDER.index(family) || FAMILY_ORDER.size, family, version.map(&:to_i) ]
     end
 
     def rates_for(model)

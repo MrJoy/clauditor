@@ -29,7 +29,7 @@ module Clauditor
     #   cells  — { [date, project] => { model => Aggregator::Row } }
     def pivot(rows)
       priced = rows.select { |row| Pricing.known?(row.model) }
-      models = priced.map(&:model).uniq.sort
+      models = priced.map(&:model).uniq.sort_by { |model| Pricing.sort_key(model) }
       cells = Hash.new { |hash, key| hash[key] = {} }
       priced.each { |row| cells[[ row.date, row.project ]][row.model] = row }
       [ models, cells.keys.sort, cells ]

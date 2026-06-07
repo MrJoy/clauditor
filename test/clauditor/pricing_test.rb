@@ -42,6 +42,18 @@ module Clauditor
       assert_in_delta expected, Pricing.cost_for("claude-opus-4-8", usage), 1e-9
     end
 
+    def test_sort_key_orders_by_family_then_version
+      models = %w[opus-4-8 haiku-4-5 opus-4-7 sonnet-4-6 sonnet-4-5]
+
+      assert_equal %w[haiku-4-5 sonnet-4-5 sonnet-4-6 opus-4-7 opus-4-8],
+        models.sort_by { |model| Pricing.sort_key(model) }
+    end
+
+    def test_sort_key_normalizes_before_ordering
+      # A raw, dated claude id sorts the same as its normalized form.
+      assert_equal Pricing.sort_key("opus-4-8"), Pricing.sort_key("claude-opus-4-8")
+    end
+
     def test_cost_for_returns_nil_for_unknown_model
       usage = Usage.new(input: 1_000_000)
 

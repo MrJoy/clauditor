@@ -34,6 +34,19 @@ module Clauditor
       refute keys.include?([ "2026-06-08", "/Users/me/b" ]) && cells[[ "2026-06-08", "/Users/me/b" ]].key?("qwen3.6:27b-coding-nvfp4")
     end
 
+    def test_pivot_orders_columns_by_family_then_version
+      varied = [
+        row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 1, cost: 0.1),
+        row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-7", input: 1, cost: 0.1),
+        row(project: "/Users/me/a", date: "2026-06-07", model: "sonnet-4-6", input: 1, cost: 0.1),
+        row(project: "/Users/me/a", date: "2026-06-07", model: "haiku-4-5", input: 1, cost: 0.1),
+      ]
+
+      models, = Crosstab.pivot(varied)
+
+      assert_equal %w[haiku-4-5 sonnet-4-6 opus-4-7 opus-4-8], models
+    end
+
     def test_table_has_spanning_model_header_and_subcolumns
       lines = Crosstab::Table.render(rows).lines
 
