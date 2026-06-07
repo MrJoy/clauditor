@@ -77,6 +77,23 @@ module Clauditor
       assert_includes err, "--anthropic is not supported with --format json"
     end
 
+    def test_project_filter_matches_substring
+      with_fixture_root do |root|
+        status, out, = run_cli([ "--root", root, "--utc", "--project", "proj" ])
+
+        assert_equal 0, status
+        assert_includes out, "opus-4-8"
+      end
+    end
+
+    def test_project_filter_excludes_non_matching
+      with_fixture_root do |root|
+        _status, out, = run_cli([ "--root", root, "--utc", "--project", "nonexistent" ])
+
+        refute_includes out, "opus-4-8"
+      end
+    end
+
     def test_invalid_format_reports_error_and_nonzero_status
       status, _out, err = run_cli([ "--format", "xml" ])
 

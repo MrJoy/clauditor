@@ -30,6 +30,15 @@ module Clauditor
       assert_equal "0", Formatters.delimit(0)
     end
 
+    def test_scale_abbreviates_with_suffixes
+      assert_equal "999", Formatters.scale(999)
+      assert_equal "1.0k", Formatters.scale(1000)
+      assert_equal "58.1k", Formatters.scale(58_078)
+      assert_equal "1.2m", Formatters.scale(1_234_567)
+      assert_equal "185.3m", Formatters.scale(185_287_171)
+      assert_equal "2.0b", Formatters.scale(2_000_000_000)
+    end
+
     def test_table_renders_headers_totals_and_costs
       output = Formatters::Table.render(rows)
 

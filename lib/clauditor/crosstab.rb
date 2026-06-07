@@ -42,12 +42,14 @@ module Clauditor
 
       SUBCOLUMNS = %w[Tokens Cost].freeze
 
-      def render(rows)
+      # Token counts are abbreviated with scale suffixes (k/m/b) unless
+      # verbose; costs are always shown in full.
+      def render(rows, verbose: false)
         models, keys, cells = Crosstab.pivot(rows)
 
         flat_headers = LABELS + models.flat_map { SUBCOLUMNS }
-        data = keys.map { |key| data_row(key, models, cells) }
-        total = totals_row(models, cells)
+        data = keys.map { |key| data_row(key, models, cells, verbose) }
+        total = totals_row(models, cells, verbose)
 
         widths = widen_for_model_names(flat_widths(flat_headers, data + [ total ]), models)
         aligns = [ :left, :left ] + Array.new(models.size * 2, :right)
@@ -59,24 +61,28 @@ module Clauditor
         "#{lines.join("\n")}\n"
       end
 
-      def data_row(key, models, cells)
+      def data_row(key, models, cells, verbose)
         row = [ key.first, ProjectNormalizer.display(key.last) ]
         models.each do |model|
           cell = cells[key][model]
-          row << (cell ? Formatters.delimit(cell.usage.total) : "")
+          row << (cell ? tokens(cell.usage.total, verbose) : "")
           row << (cell ? "$#{Formatters.delimit_decimal(cell.cost)}" : "")
         end
         row
       end
 
-      def totals_row(models, cells)
+      def totals_row(models, cells, verbose)
         row = [ "TOTAL", "" ]
         models.each do |model|
           present = cells.values.filter_map { |by_model| by_model[model] }
-          row << Formatters.delimit(present.sum(0) { |cell| cell.usage.total })
+          row << tokens(present.sum(0) { |cell| cell.usage.total }, verbose)
           row << "$#{Formatters.delimit_decimal(present.sum(0.0, &:cost))}"
         end
         row
+      end
+
+      def tokens(value, verbose)
+        verbose ? Formatters.delimit(value) : Formatters.scale(value)
       end
 
       def flat_widths(headers, rows)
@@ -126,7 +132,10 @@ module Clauditor
 
       METRICS = [ "Input", "Output", "Cache Write", "Cache Read", "Cost" ].freeze
 
-      def render(rows)
+      # verbose is accepted for a uniform interface but ignored — CSV always
+      # carries full-precision numbers.
+      def render(rows, verbose: false)
+        _ = verbose
         models, keys, cells = Crosstab.pivot(rows)
 
         CSV.generate do |csv|

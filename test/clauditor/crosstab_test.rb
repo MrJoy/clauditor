@@ -68,6 +68,24 @@ module Clauditor
       assert_includes total_line, "$2.40"
     end
 
+    def test_table_abbreviates_tokens_by_default
+      big = [ row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 1_999_980, cost: 9.0) ]
+
+      output = Crosstab::Table.render(big)
+
+      assert_includes output, "2.0m"        # 1,999,980 + 2 + 3 + 4 ≈ 2.0m
+      refute_includes output, "1,999,989"
+    end
+
+    def test_table_verbose_shows_full_token_counts
+      big = [ row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 1_999_980, cost: 9.0) ]
+
+      output = Crosstab::Table.render(big, verbose: true)
+
+      assert_includes output, "1,999,989"
+      refute_includes output, "2.0m"
+    end
+
     def test_table_one_row_per_day_project
       data_lines = Crosstab::Table.render(rows).lines.select { |l| l =~ /^\d{4}-\d{2}-\d{2}/ }
 

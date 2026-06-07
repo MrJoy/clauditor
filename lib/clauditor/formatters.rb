@@ -13,6 +13,22 @@ module Clauditor
       number.to_i.to_s.reverse.gsub(/(\d{3})(?=\d)/, '\1,').reverse
     end
 
+    # Compact magnitude with a scale suffix, e.g. 1234567 => "1.2m". Values
+    # below 1,000 are left as plain integers.
+    def scale(number)
+      number = number.to_i
+      abs = number.abs
+      if abs >= 1_000_000_000
+        "#{format("%.1f", number / 1_000_000_000.0)}b"
+      elsif abs >= 1_000_000
+        "#{format("%.1f", number / 1_000_000.0)}m"
+      elsif abs >= 1_000
+        "#{format("%.1f", number / 1_000.0)}k"
+      else
+        number.to_s
+      end
+    end
+
     # Renders a dollar figure with thousands separators and two decimals.
     def delimit_decimal(cost)
       whole, fraction = format("%.2f", cost).split(".")
