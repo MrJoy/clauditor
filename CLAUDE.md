@@ -5,9 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 Clauditor is a Ruby tool that reviews Claude Code session and tool-result data and produces a
-per-project, per-day, per-model report of token usage. The repository is in an early bootstrap
-state — the Rake/lint/test scaffolding exists, but the analysis code (`lib/`) and tests have not
-been written yet.
+per-project, per-day, per-model report of token usage and estimated cost. Run it via
+`bundle exec bin/clauditor [--format table|csv|json] [--utc] [--root DIR]`.
 
 ## Commands
 
@@ -33,6 +32,19 @@ rbenv-gemset assumed).
   inline); RubyGems source has a 7-day `cooldown` to avoid pulling brand-new releases.
 - Tests use **minitest** (`minitest/autorun` via `test/test_helper.rb`); coverage via **simplecov**.
   Test files are discovered as `test/**/*_test.rb`.
+
+## Architecture
+
+The pipeline is `bin/clauditor` → `Clauditor::CLI` → loader → aggregator → formatter, with `lib/clauditor.rb` wiring the requires. Key pieces under `lib/clauditor/`:
+
+- **`SessionLoader`** discovers and streams parsed records from `~/.claude/projects/**/*.jsonl` (overridable via `--root`). Malformed lines are skipped — transcripts are append-only and a truncated last line is normal.
+- **`Aggregator`** is the heart. Claude Code writes one JSONL line per content block, and **every line sharing a `message.id` repeats the same message-level `usage`** — so it dedupes by `message.id` *globally* (resumed sessions replay earlier messages into new files). Summing raw lines overcounts several-fold. It groups by `(project, day, model)`, sums usage, and costs each cell.
+- **`Usage`** is the value object for the four billable dimensions. Cache-creation tokens are kept split by TTL (5-minute vs 1-hour) because they're priced differently; `cache_write` re-sums them for display.
+- **`Pricing`** holds per-model USD/MTok rates plus cache multipliers (read 0.1×, 5m write 1.25×, 1h write 2×). It strips date suffixes from model ids (`claude-haiku-4-5-20251001` → `claude-haiku-4-5`) and returns `nil` cost for unknown/local models (e.g. `<synthetic>`, `qwen…`) rather than guessing.
+- **`ProjectNormalizer`** collapses git worktrees back to their logical repo: anything under `<repo>/.claude/…` truncates to `<repo>`, and externally-managed `…/tmp/worktrees/<repo>/<name>` yields a loose repo name that a second pass (`build_remap`) reattaches to the unique canonical checkout. Plain subdirectories are *not* merged — only worktrees normalize.
+- **`Formatters`** has `Table` (aligned, with a TOTAL row), `Csv`, and `Json` submodules. Unpriced rows render cost as `—` / blank / `null`+`priced:false`.
+
+Days bucket in **local time** by default; `--utc` switches to UTC. `test_helper.rb` starts SimpleCov, puts `lib/` on the load path, and requires `clauditor`.
 
 ## Structure notes
 

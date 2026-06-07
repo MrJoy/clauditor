@@ -1,0 +1,46 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+module Clauditor
+  class PricingTest < Minitest::Test
+    def test_normalize_model_strips_trailing_date_stamp
+      assert_equal "claude-haiku-4-5", Pricing.normalize_model("claude-haiku-4-5-20251001")
+      assert_equal "claude-opus-4-8", Pricing.normalize_model("claude-opus-4-8")
+    end
+
+    def test_known_handles_dated_and_unknown_models
+      assert Pricing.known?("claude-haiku-4-5-20251001")
+      assert Pricing.known?("claude-opus-4-8")
+      refute Pricing.known?("qwen3.6:27b-coding-nvfp4")
+      refute Pricing.known?("<synthetic>")
+    end
+
+    def test_cost_for_applies_base_and_cache_multipliers
+      # One million of each dimension makes the math easy to read against the
+      # opus rate ($5 input / $25 output) and cache multipliers.
+      usage = Usage.new(
+        input: 1_000_000,
+        output: 1_000_000,
+        cache_read: 1_000_000,
+        cache_write_5m: 1_000_000,
+        cache_write_1h: 1_000_000,
+      )
+
+      expected =
+        5.0 +            # input
+        25.0 +           # output
+        (5.0 * 0.1) +    # cache read
+        (5.0 * 1.25) +   # 5m cache write
+        (5.0 * 2.0)      # 1h cache write
+
+      assert_in_delta expected, Pricing.cost_for("claude-opus-4-8", usage), 1e-9
+    end
+
+    def test_cost_for_returns_nil_for_unknown_model
+      usage = Usage.new(input: 1_000_000)
+
+      assert_nil Pricing.cost_for("qwen3.6:27b-coding-nvfp4", usage)
+    end
+  end
+end
