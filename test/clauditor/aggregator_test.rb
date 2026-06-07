@@ -101,6 +101,18 @@ module Clauditor
       assert_equal 200, rows.first.usage.input
     end
 
+    def test_synthetic_placeholder_turns_are_omitted
+      agg = Aggregator.new(timezone: :utc)
+      agg.add(assistant(id: "real", cwd: "/Users/me/proj", model: "claude-opus-4-8"))
+      agg.add(assistant(id: "synth", cwd: "/Users/me/proj", model: "<synthetic>",
+        usage: { "input_tokens" => 0, "output_tokens" => 0 }))
+
+      rows = agg.rows
+
+      assert_equal 1, rows.size
+      assert_equal "opus-4-8", rows.first.model
+    end
+
     def test_unknown_model_has_no_cost
       agg = Aggregator.new(timezone: :utc)
       agg.add(assistant(id: "a", cwd: "/Users/me/proj", model: "qwen3.6:27b-coding-nvfp4"))

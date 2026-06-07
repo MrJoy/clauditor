@@ -31,6 +31,11 @@ module Clauditor
       @raw_projects = {}
     end
 
+    # Client-generated placeholder turns (API-error notices, autocompact
+    # warnings) Claude Code injects into the transcript. They carry no usage and
+    # aren't real model calls, so they're excluded from the report.
+    SYNTHETIC_MODEL = "<synthetic>"
+
     # Feeds one parsed JSONL record. Ignores anything without billable usage.
     def add(record)
       return unless record["type"] == "assistant"
@@ -42,6 +47,9 @@ module Clauditor
       message_id = message["id"]
       return unless usage.is_a?(Hash) && message_id
 
+      model = Pricing.normalize_model(message["model"].to_s)
+      return if model == SYNTHETIC_MODEL
+
       return if @seen_message_ids.key?(message_id)
 
       @seen_message_ids[message_id] = true
@@ -51,7 +59,6 @@ module Clauditor
       # absolute paths collapse to their repository root now.
       project = raw.start_with?("/") ? resolve_repo_root(raw) : raw
       @raw_projects[project] = true
-      model = Pricing.normalize_model(message["model"].to_s)
       key = [ project, day_for(record["timestamp"]), model ]
       @groups[key] += Usage.from_message_usage(usage)
     end
