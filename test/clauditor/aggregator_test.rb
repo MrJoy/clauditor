@@ -61,6 +61,21 @@ module Clauditor
       assert_equal 2000, row.usage.cache_read
     end
 
+    def test_subdirectories_collapse_to_the_repo_root
+      # Stub repo-root resolution: everything under /Users/me/proj is the repo.
+      repo_root = ->(path) { path.start_with?("/Users/me/proj") ? "/Users/me/proj" : path }
+      agg = Aggregator.new(timezone: :utc, repo_root: repo_root)
+      agg.add(assistant(id: "a", cwd: "/Users/me/proj"))
+      agg.add(assistant(id: "b", cwd: "/Users/me/proj/client/Assets/HordesOfOrcs3"))
+      agg.add(assistant(id: "c", cwd: "/Users/me/proj/api"))
+
+      rows = agg.rows
+
+      assert_equal 1, rows.size
+      assert_equal "/Users/me/proj", rows.first.project
+      assert_equal 300, rows.first.usage.input
+    end
+
     def test_worktrees_collapse_into_their_repo
       agg = Aggregator.new(timezone: :utc)
       agg.add(assistant(id: "a", cwd: "/Users/me/teak/carrot"))

@@ -19,9 +19,13 @@ module Clauditor
     end
 
     # timezone: :local (default) buckets days in the local zone; :utc buckets
-    # by the raw UTC timestamps.
-    def initialize(timezone: :local)
+    # by the raw UTC timestamps. repo_root resolves a path to its repository
+    # root (injectable for testing); results are memoized so it's not a
+    # filesystem hit per record.
+    def initialize(timezone: :local, repo_root: ProjectNormalizer.method(:repo_root))
       @timezone = timezone
+      @repo_root = repo_root
+      @repo_root_cache = {}
       @seen_message_ids = {}
       @groups = Hash.new { |h, k| h[k] = Usage.new }
       @raw_projects = {}
@@ -42,14 +46,17 @@ module Clauditor
 
       @seen_message_ids[message_id] = true
 
-      project = ProjectNormalizer.raw(record["cwd"])
+      raw = ProjectNormalizer.raw(record["cwd"])
+      # Loose worktree names (no leading slash) are resolved later by remap;
+      # absolute paths collapse to their repository root now.
+      project = raw.start_with?("/") ? resolve_repo_root(raw) : raw
       @raw_projects[project] = true
       model = Pricing.normalize_model(message["model"].to_s)
       key = [ project, day_for(record["timestamp"]), model ]
       @groups[key] += Usage.from_message_usage(usage)
     end
 
-    # Collapsed, costed rows sorted by project, then date, then model.
+    # Collapsed, costed rows sorted by date, then project, then model.
     def rows
       remap = ProjectNormalizer.build_remap(@raw_projects.keys)
 
@@ -67,10 +74,14 @@ module Clauditor
           usage: usage,
           cost: Pricing.cost_for(model, usage),
         )
-      end.sort_by { |row| [ row.project, row.date, row.model ] }
+      end.sort_by { |row| [ row.date, row.project, row.model ] }
     end
 
     private
+
+    def resolve_repo_root(path)
+      @repo_root_cache[path] ||= @repo_root.call(path)
+    end
 
     def day_for(timestamp)
       return "unknown" if timestamp.nil? || timestamp.empty?

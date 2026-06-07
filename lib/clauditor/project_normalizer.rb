@@ -14,10 +14,31 @@ module Clauditor
   #     These yield a "loose" key (the bare repo name) that .build_remap later
   #     reattaches to the real checkout when the name is unambiguous.
   #
-  # Plain subdirectories of a repo (e.g. `<repo>/api`) are intentionally left
-  # alone — only worktrees are normalized.
+  # Subdirectories of a repo (e.g. `<repo>/api`, `<repo>/client/Assets/...`)
+  # collapse to the repo root — see .repo_root.
   module ProjectNormalizer
     module_function
+
+    # Resolves a path to its git repository root: the nearest ancestor
+    # (inclusive) containing a `.git` entry — a directory for a normal checkout,
+    # a file for a worktree. This collapses repo subdirectories onto the repo
+    # itself. Returns the path unchanged when nothing is absolute or no `.git`
+    # is found (e.g. the checkout no longer exists on disk). The `exist`
+    # predicate is injectable for testing.
+    def repo_root(path, exist: ->(candidate) { File.exist?(candidate) })
+      return path unless path.start_with?("/")
+
+      current = path
+      loop do
+        return current if exist.call(File.join(current, ".git"))
+
+        parent = File.dirname(current)
+        break if parent == current
+
+        current = parent
+      end
+      path
+    end
 
     # First-pass normalization of a single cwd. Returns either an absolute
     # canonical path or a "loose" bare repo name (no leading slash).

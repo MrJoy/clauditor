@@ -57,6 +57,38 @@ module Clauditor
       refute remap.key?("carrot")
     end
 
+    def test_repo_root_collapses_subdirectory_to_nearest_git_ancestor
+      git_dirs = [ "/Users/me/games/3DTDF2P/.git" ]
+      exist = ->(candidate) { git_dirs.include?(candidate) }
+
+      assert_equal "/Users/me/games/3DTDF2P",
+        ProjectNormalizer.repo_root("/Users/me/games/3DTDF2P/client/Assets/HordesOfOrcs3", exist: exist)
+    end
+
+    def test_repo_root_returns_the_root_itself_unchanged
+      exist = ->(candidate) { candidate == "/Users/me/games/3DTDF2P/.git" }
+
+      assert_equal "/Users/me/games/3DTDF2P",
+        ProjectNormalizer.repo_root("/Users/me/games/3DTDF2P", exist: exist)
+    end
+
+    def test_repo_root_stops_at_nearest_nested_repo
+      # A nested checkout (its own .git) is its own root, not its parent's.
+      exist = ->(candidate) { [ "/Users/me/a/.git", "/Users/me/a/b/.git" ].include?(candidate) }
+
+      assert_equal "/Users/me/a/b", ProjectNormalizer.repo_root("/Users/me/a/b/c", exist: exist)
+    end
+
+    def test_repo_root_returns_path_unchanged_when_no_git_found
+      exist = ->(_candidate) { false }
+
+      assert_equal "/Users/me/orphan/sub", ProjectNormalizer.repo_root("/Users/me/orphan/sub", exist: exist)
+    end
+
+    def test_repo_root_ignores_non_absolute_loose_names
+      assert_equal "carrot", ProjectNormalizer.repo_root("carrot", exist: ->(_c) { true })
+    end
+
     def test_display_renders_home_relative
       assert_equal "~/teak/carrot", ProjectNormalizer.display("/home/me/teak/carrot", home: "/home/me")
       assert_equal "~", ProjectNormalizer.display("/home/me", home: "/home/me")
