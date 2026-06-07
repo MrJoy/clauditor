@@ -16,11 +16,17 @@ module Clauditor
       options = parse(argv)
       return 0 if options[:exit]
 
+      if options[:anthropic] && options[:format] == "json"
+        err.puts "clauditor: --anthropic is not supported with --format json (use table or csv)"
+        return 1
+      end
+
       aggregator = Aggregator.new(timezone: options[:timezone])
       loader = SessionLoader.new(root: options[:root])
       loader.each_record { |record| aggregator.add(record) }
 
-      out.print Formatters.for(options[:format]).render(aggregator.rows)
+      renderer = options[:anthropic] ? Crosstab.for(options[:format]) : Formatters.for(options[:format])
+      out.print renderer.render(aggregator.rows)
       0
     rescue OptionParser::ParseError, ArgumentError => e
       err.puts "clauditor: #{e.message}"
@@ -30,7 +36,7 @@ module Clauditor
     private
 
     def parse(argv)
-      options = { format: "table", timezone: :local, root: SessionLoader::DEFAULT_ROOT }
+      options = { format: "table", timezone: :local, root: SessionLoader::DEFAULT_ROOT, anthropic: false }
 
       parser = OptionParser.new do |opts|
         opts.banner = "Usage: clauditor [options]"
@@ -41,6 +47,10 @@ module Clauditor
 
         opts.on("--utc", "Bucket days by UTC instead of local time") do
           options[:timezone] = :utc
+        end
+
+        opts.on("--anthropic", "Crosstab Anthropic models across columns (table, csv; not json)") do
+          options[:anthropic] = true
         end
 
         opts.on("--root DIR", "Session transcripts directory (default: ~/.claude/projects)") do |dir|

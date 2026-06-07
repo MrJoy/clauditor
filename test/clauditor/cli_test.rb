@@ -59,6 +59,24 @@ module Clauditor
       assert_includes out.string, "Usage: clauditor"
     end
 
+    def test_anthropic_table_renders_crosstab_with_spanning_header
+      with_fixture_root do |root|
+        status, out, = run_cli([ "--root", root, "--anthropic", "--utc" ])
+
+        assert_equal 0, status
+        assert_includes out, "opus-4-8"
+        assert_includes out, "Tokens"
+        assert_includes out, "Cost"
+      end
+    end
+
+    def test_anthropic_with_json_exits_one_without_loading
+      status, _out, err = run_cli([ "--anthropic", "--format", "json" ])
+
+      assert_equal 1, status
+      assert_includes err, "--anthropic is not supported with --format json"
+    end
+
     def test_invalid_format_reports_error_and_nonzero_status
       status, _out, err = run_cli([ "--format", "xml" ])
 

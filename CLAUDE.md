@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Clauditor is a Ruby tool that reviews Claude Code session and tool-result data and produces a
 per-project, per-day, per-model report of token usage and estimated cost. Run it via
-`bundle exec bin/clauditor [--format table|csv|json] [--utc] [--root DIR]`.
+`bundle exec bin/clauditor [--format table|csv|json] [--anthropic] [--utc] [--root DIR]`.
 
 ## Commands
 
@@ -43,6 +43,7 @@ The pipeline is `bin/clauditor` → `Clauditor::CLI` → loader → aggregator �
 - **`Pricing`** holds per-model USD/MTok rates plus cache multipliers (read 0.1×, 5m write 1.25×, 1h write 2×). `normalize_model` reduces Claude ids to a concise name — dropping the `claude-` prefix and any trailing date stamp (`claude-haiku-4-5-20251001` → `haiku-4-5`) — which is also the id the report groups and displays by; non-Claude ids pass through untouched and cost `nil` (e.g. `<synthetic>`, `qwen…`) rather than guessing.
 - **`ProjectNormalizer`** collapses sessions back to their logical repo. Subdirectories collapse to the repo root via `repo_root`, which walks up to the nearest ancestor containing a `.git` entry (dir = checkout, file = worktree). On top of that, anything under `<repo>/.claude/…` truncates to `<repo>`, and externally-managed `…/tmp/worktrees/<repo>/<name>` yields a loose repo name that a second pass (`build_remap`) reattaches to the unique canonical checkout. `Aggregator` memoizes `repo_root` (and accepts an injected resolver) so it isn't a filesystem hit per record.
 - **`Formatters`** has `Table` (aligned, with a TOTAL row), `Csv`, and `Json` submodules. Unpriced rows render cost as `—` / blank / `null`+`priced:false`.
+- **`Crosstab`** is the `--anthropic` view: it pivots the flat rows to one line per `(day, project)` with Anthropic models spread across columns (non-Anthropic models are dropped). `Table` uses a two-line header (model name spans its Tokens+Cost pair); `Csv` emits five model-prefixed columns per model (Input/Output/Cache Write/Cache Read/Cost). JSON is unsupported — the CLI exits 1 with a message *before* loading data.
 
 Days bucket in **local time** by default; `--utc` switches to UTC. `test_helper.rb` starts SimpleCov, puts `lib/` on the load path, and requires `clauditor`.
 
