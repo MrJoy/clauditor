@@ -86,6 +86,28 @@ module Clauditor
       refute_includes output, "2.0m"
     end
 
+    def test_table_has_grand_total_columns_per_row
+      lines = Crosstab::Table.render(rows).lines
+
+      top = lines[0]
+      # A trailing "Total" group spans the last (Tokens, Cost) pair.
+      assert_includes top, "Total"
+      assert_operator top.index("Total"), :>, top.index("opus-4-8")
+
+      # Row for /Users/me/a: haiku (10+9=19) + opus (100+9=109) = 128 tokens,
+      # 0.2 + 1.5 = $1.70.
+      row_a = lines.find { |line| line.include?("~/a") || line.include?("/Users/me/a") }
+      assert_includes row_a, "128"
+      assert_includes row_a, "$1.70"
+    end
+
+    def test_table_grand_total_of_totals_row
+      total_line = Crosstab::Table.render(rows).lines.find { |line| line.start_with?("TOTAL") }
+
+      # Grand total cost across all models/rows: 0.2 + 1.5 + 0.9 = $2.60.
+      assert_includes total_line, "$2.60"
+    end
+
     def test_table_one_row_per_day_project
       data_lines = Crosstab::Table.render(rows).lines.select { |l| l =~ /^\d{4}-\d{2}-\d{2}/ }
 

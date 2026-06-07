@@ -41,20 +41,23 @@ module Clauditor
       module_function
 
       SUBCOLUMNS = %w[Tokens Cost].freeze
+      TOTAL_GROUP = "Total"
 
       # Token counts are abbreviated with scale suffixes (k/m/b) unless
-      # verbose; costs are always shown in full.
+      # verbose; costs are always shown in full. A trailing "Total" group sums
+      # tokens and cost across every model for the (day, project) row.
       def render(rows, verbose: false)
         models, keys, cells = Crosstab.pivot(rows)
+        groups = models + [ TOTAL_GROUP ]
 
-        flat_headers = LABELS + models.flat_map { SUBCOLUMNS }
+        flat_headers = LABELS + groups.flat_map { SUBCOLUMNS }
         data = keys.map { |key| data_row(key, models, cells, verbose) }
         total = totals_row(models, cells, verbose)
 
-        widths = widen_for_model_names(flat_widths(flat_headers, data + [ total ]), models)
-        aligns = [ :left, :left ] + Array.new(models.size * 2, :right)
+        widths = widen_for_model_names(flat_widths(flat_headers, data + [ total ]), groups)
+        aligns = [ :left, :left ] + Array.new(groups.size * 2, :right)
 
-        lines = [ top_header(models, widths), format_flat(flat_headers, widths, aligns), separator(widths) ]
+        lines = [ top_header(groups, widths), format_flat(flat_headers, widths, aligns), separator(widths) ]
         data.each { |row| lines << format_flat(row, widths, aligns) }
         lines << separator(widths)
         lines << format_flat(total, widths, aligns)
@@ -63,21 +66,27 @@ module Clauditor
 
       def data_row(key, models, cells, verbose)
         row = [ key.first, ProjectNormalizer.display(key.last) ]
+        present = models.filter_map { |model| cells[key][model] }
         models.each do |model|
           cell = cells[key][model]
           row << (cell ? tokens(cell.usage.total, verbose) : "")
           row << (cell ? "$#{Formatters.delimit_decimal(cell.cost)}" : "")
         end
+        row << tokens(present.sum(0) { |cell| cell.usage.total }, verbose)
+        row << "$#{Formatters.delimit_decimal(present.sum(0.0, &:cost))}"
         row
       end
 
       def totals_row(models, cells, verbose)
         row = [ "TOTAL", "" ]
+        all = cells.values.flat_map(&:values)
         models.each do |model|
           present = cells.values.filter_map { |by_model| by_model[model] }
           row << tokens(present.sum(0) { |cell| cell.usage.total }, verbose)
           row << "$#{Formatters.delimit_decimal(present.sum(0.0, &:cost))}"
         end
+        row << tokens(all.sum(0) { |cell| cell.usage.total }, verbose)
+        row << "$#{Formatters.delimit_decimal(all.sum(0.0, &:cost))}"
         row
       end
 
@@ -91,25 +100,26 @@ module Clauditor
         end
       end
 
-      # Ensure each model's (Tokens, Cost) pair is at least as wide as the model
-      # name that spans it, padding the Cost column to absorb any deficit.
-      def widen_for_model_names(widths, models)
+      # Ensure each group's (Tokens, Cost) pair is at least as wide as the
+      # heading that spans it (a model name, or "Total"), padding the Cost
+      # column to absorb any deficit.
+      def widen_for_model_names(widths, groups)
         widths = widths.dup
-        models.each_with_index do |model, index|
+        groups.each_with_index do |group, index|
           tokens_col = 2 + (index * 2)
           cost_col = tokens_col + 1
-          deficit = model.length - (widths[tokens_col] + GAP.length + widths[cost_col])
+          deficit = group.length - (widths[tokens_col] + GAP.length + widths[cost_col])
           widths[cost_col] += deficit if deficit.positive?
         end
         widths
       end
 
-      def top_header(models, widths)
+      def top_header(groups, widths)
         segments = [ " " * (widths[0] + GAP.length + widths[1]) ]
-        models.each_with_index do |model, index|
+        groups.each_with_index do |group, index|
           tokens_col = 2 + (index * 2)
           span = widths[tokens_col] + GAP.length + widths[tokens_col + 1]
-          segments << model.center(span)
+          segments << group.center(span)
         end
         segments.join(GAP).rstrip
       end
