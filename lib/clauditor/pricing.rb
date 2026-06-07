@@ -8,15 +8,15 @@ module Clauditor
   # the base input rate; 5-minute cache writes at 1.25x; 1-hour writes at 2x.
   module Pricing
     # Base input/output rates in USD per million tokens, keyed by the
-    # date-stripped model id (see .normalize_model).
+    # normalized model id (see .normalize_model — no "claude-" prefix, no date).
     RATES = {
-      "claude-opus-4-8" => { input: 5.0, output: 25.0 },
-      "claude-opus-4-7" => { input: 5.0, output: 25.0 },
-      "claude-opus-4-6" => { input: 5.0, output: 25.0 },
-      "claude-opus-4-5" => { input: 5.0, output: 25.0 },
-      "claude-sonnet-4-6" => { input: 3.0, output: 15.0 },
-      "claude-sonnet-4-5" => { input: 3.0, output: 15.0 },
-      "claude-haiku-4-5" => { input: 1.0, output: 5.0 },
+      "opus-4-8" => { input: 5.0, output: 25.0 },
+      "opus-4-7" => { input: 5.0, output: 25.0 },
+      "opus-4-6" => { input: 5.0, output: 25.0 },
+      "opus-4-5" => { input: 5.0, output: 25.0 },
+      "sonnet-4-6" => { input: 3.0, output: 15.0 },
+      "sonnet-4-5" => { input: 3.0, output: 15.0 },
+      "haiku-4-5" => { input: 1.0, output: 5.0 },
     }.freeze
 
     CACHE_READ_MULTIPLIER = 0.1
@@ -27,10 +27,16 @@ module Clauditor
 
     module_function
 
-    # Strips a trailing date stamp (e.g. "claude-haiku-4-5-20251001") so dated
-    # and undated model ids resolve to the same rate entry.
+    # Normalizes a Claude model id to a concise, distinctive name by dropping
+    # the "claude-" prefix and any trailing date stamp
+    # (e.g. "claude-haiku-4-5-20251001" => "haiku-4-5"), so dated/undated ids
+    # group and price together and reports stay readable. Non-Claude ids are
+    # returned untouched, in case their text is meaningful.
     def normalize_model(model)
-      model.to_s.sub(/-\d{8}\z/, "")
+      id = model.to_s
+      return id unless id.start_with?("claude-")
+
+      id.delete_prefix("claude-").sub(/-\d{8}\z/, "")
     end
 
     def known?(model)

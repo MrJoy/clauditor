@@ -44,7 +44,8 @@ module Clauditor
 
       project = ProjectNormalizer.raw(record["cwd"])
       @raw_projects[project] = true
-      key = [ project, day_for(record["timestamp"]), message["model"].to_s ]
+      model = Pricing.normalize_model(message["model"].to_s)
+      key = [ project, day_for(record["timestamp"]), model ]
       @groups[key] += Usage.from_message_usage(usage)
     end
 

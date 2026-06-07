@@ -45,8 +45,8 @@ module Clauditor
 
       assert_equal 3, rows.size
       models = rows.map(&:model)
-      assert_includes models, "claude-opus-4-8"
-      assert_includes models, "claude-sonnet-4-6"
+      assert_includes models, "opus-4-8"
+      assert_includes models, "sonnet-4-6"
     end
 
     def test_sums_usage_within_a_group
@@ -72,6 +72,18 @@ module Clauditor
       assert_equal 1, rows.size
       assert_equal "/Users/me/teak/carrot", rows.first.project
       assert_equal 300, rows.first.usage.input
+    end
+
+    def test_dated_and_undated_claude_models_collapse_into_one_row
+      agg = Aggregator.new(timezone: :utc)
+      agg.add(assistant(id: "a", cwd: "/Users/me/proj", model: "claude-haiku-4-5-20251001"))
+      agg.add(assistant(id: "b", cwd: "/Users/me/proj", model: "claude-haiku-4-5"))
+
+      rows = agg.rows
+
+      assert_equal 1, rows.size
+      assert_equal "haiku-4-5", rows.first.model
+      assert_equal 200, rows.first.usage.input
     end
 
     def test_unknown_model_has_no_cost

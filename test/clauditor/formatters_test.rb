@@ -11,7 +11,7 @@ module Clauditor
         Aggregator::Row.new(
           project: File.join(Dir.home, "teak/carrot"),
           date: "2026-06-07",
-          model: "claude-opus-4-8",
+          model: "opus-4-8",
           usage: Usage.new(input: 1234, output: 56, cache_read: 7890, cache_write_5m: 12, cache_write_1h: 0),
           cost: 1234.5678,
         ),
@@ -47,7 +47,7 @@ module Clauditor
 
       assert_equal %w[project date model input_tokens output_tokens cache_creation_tokens
         cache_read_tokens total_tokens cost_usd], table.headers
-      priced = table.find { |r| r["model"] == "claude-opus-4-8" }
+      priced = table.find { |r| r["model"] == "opus-4-8" }
       unpriced = table.find { |r| r["model"] == "qwen3.6:27b-coding-nvfp4" }
 
       assert_equal "1234.5678", priced["cost_usd"]
@@ -57,7 +57,7 @@ module Clauditor
     def test_json_marks_priced_flag_and_nulls_cost
       payload = JSON.parse(Formatters::Json.render(rows))
 
-      priced = payload.find { |r| r["model"] == "claude-opus-4-8" }
+      priced = payload.find { |r| r["model"] == "opus-4-8" }
       unpriced = payload.find { |r| r["model"] == "qwen3.6:27b-coding-nvfp4" }
 
       assert_equal true, priced["priced"]

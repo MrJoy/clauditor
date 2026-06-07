@@ -4,9 +4,14 @@ require "test_helper"
 
 module Clauditor
   class PricingTest < Minitest::Test
-    def test_normalize_model_strips_trailing_date_stamp
-      assert_equal "claude-haiku-4-5", Pricing.normalize_model("claude-haiku-4-5-20251001")
-      assert_equal "claude-opus-4-8", Pricing.normalize_model("claude-opus-4-8")
+    def test_normalize_model_strips_claude_prefix_and_date_for_claude_ids
+      assert_equal "haiku-4-5", Pricing.normalize_model("claude-haiku-4-5-20251001")
+      assert_equal "opus-4-8", Pricing.normalize_model("claude-opus-4-8")
+    end
+
+    def test_normalize_model_leaves_non_claude_ids_untouched
+      assert_equal "qwen3.6:27b-coding-nvfp4", Pricing.normalize_model("qwen3.6:27b-coding-nvfp4")
+      assert_equal "local-model-20251001", Pricing.normalize_model("local-model-20251001")
     end
 
     def test_known_handles_dated_and_unknown_models

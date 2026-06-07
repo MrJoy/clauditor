@@ -30,7 +30,7 @@ module Clauditor
         assert_equal 0, status
         # The duplicated message id must be counted once: 100 input, not 200.
         assert_includes out, "100"
-        assert_includes out, "claude-opus-4-8"
+        assert_includes out, "opus-4-8"
         assert_includes out, "TOTAL"
       end
     end
