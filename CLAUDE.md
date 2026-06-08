@@ -11,7 +11,7 @@ per-project, per-day, per-model report of token usage and estimated cost. Run it
 ## Commands
 
 ```bash
-bundle intall
+bundle install
 bundle exec rake test                              # run the full test suite
 bundle exec ruby -Itest test/path/to/foo_test.rb   # run a single test file
 bundle exec ruby -Itest test/path/to/foo_test.rb -n test_method_name  # run one test
