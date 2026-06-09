@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Clauditor is a Ruby tool that reviews Claude Code session and tool-result data and produces a
 per-project, per-day, per-model report of token usage and estimated cost. Run it via
-`bundle exec bin/clauditor [--format table|csv|json] [--anthropic] [--verbose] [--project NAME] [--utc] [--root DIR]`.
+`bundle exec bin/clauditor [--format table|csv|json] [--anthropic] [--verbose] [--project NAME] [--utc] [--root DIR] [--no-store] [--store-dir DIR]`.
 
 ## Commands
 
@@ -37,7 +37,8 @@ rbenv-gemset assumed).
 
 The pipeline is `bin/clauditor` → `Clauditor::CLI` → loader → aggregator → formatter, with `lib/clauditor.rb` wiring the requires. Key pieces under `lib/clauditor/`:
 
-- **`SessionLoader`** discovers and streams parsed records from `~/.claude/projects/**/*.jsonl` (overridable via `--root`). Malformed lines are skipped — transcripts are append-only and a truncated last line is normal.
+- **`SessionLoader`** discovers and streams parsed records from `~/.claude/projects/**/*.jsonl` (overridable via `--root`). Malformed lines are skipped — transcripts are append-only and a truncated last line is normal. A `since:` Time skips files whose mtime predates it (record timestamps never exceed the file's mtime).
+- **`Store`** persists aggregated cells for *completed* days to `~/.clauditor` (`--store-dir` to relocate, `--no-store` to bypass). A day is complete once the clock passes it, so days strictly before today are persisted and seeded back into the aggregator on the next run; **today is never persisted** — always recomputed live. This survives Claude Code's ~30-day transcript retention and makes warm runs ~10× faster (the loader skips files older than `cutoff_time`, and the aggregator's `skip_through:` drops replayed records from covered days so seeded cells aren't double-counted). Store files are keyed by `(root, timezone)` since day bucketing differs between `--utc` and local; token counts are persisted rather than costs so pricing updates apply retroactively. Anything unreadable or mismatched (version/root/timezone) loads as empty and is rebuilt by a full scan; `save` is a wholesale rewrite of the merged rows, done *before* `--project` filtering so the dataset stays complete. Rows dated `unknown` are never persisted or skipped.
 - **`Aggregator`** is the heart. Claude Code writes one JSONL line per content block, and **every line sharing a `message.id` repeats the same message-level `usage`** — so it dedupes by `message.id` *globally* (resumed sessions replay earlier messages into new files). Summing raw lines overcounts several-fold. It groups by `(project, day, model)`, sums usage, and costs each cell.
 - **`Usage`** is the value object for the four billable dimensions. Cache-creation tokens are kept split by TTL (5-minute vs 1-hour) because they're priced differently; `cache_write` re-sums them for display.
 - **`Pricing`** holds per-model USD/MTok rates plus cache multipliers (read 0.1×, 5m write 1.25×, 1h write 2×). `normalize_model` reduces Claude ids to a concise name — dropping the `claude-` prefix and any trailing date stamp (`claude-haiku-4-5-20251001` → `haiku-4-5`) — which is also the id the report groups and displays by; non-Claude ids pass through untouched and cost `nil` (e.g. `<synthetic>`, `qwen…`) rather than guessing.

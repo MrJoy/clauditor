@@ -9,12 +9,20 @@ module Clauditor
   class SessionLoader
     DEFAULT_ROOT = File.expand_path("~/.claude/projects")
 
-    def initialize(root: DEFAULT_ROOT)
+    # since: skip files last modified before this Time. Record timestamps
+    # never exceed the file's mtime (lines are appended as events happen), so
+    # an untouched file can only contain records from days the Store already
+    # covers.
+    def initialize(root: DEFAULT_ROOT, since: nil)
       @root = root
+      @since = since
     end
 
     def files
-      Dir.glob(File.join(@root, "**", "*.jsonl"))
+      found = Dir.glob(File.join(@root, "**", "*.jsonl"))
+      return found unless @since
+
+      found.select { |file| File.mtime(file) >= @since }
     end
 
     # Yields each parsed record across every transcript file.

@@ -148,5 +148,43 @@ module Clauditor
 
       assert_equal "unknown", agg.rows.first.date
     end
+
+    def test_skip_through_drops_records_from_covered_days
+      agg = Aggregator.new(timezone: :utc, skip_through: "2026-06-07")
+      agg.add(assistant(id: "old", cwd: "/Users/me/proj")) # 2026-06-07
+      agg.add(assistant(id: "new", cwd: "/Users/me/proj", timestamp: "2026-06-08T01:00:00.000Z"))
+
+      rows = agg.rows
+
+      assert_equal 1, rows.size
+      assert_equal "2026-06-08", rows.first.date
+    end
+
+    def test_skip_through_never_drops_unknown_days
+      agg = Aggregator.new(timezone: :utc, skip_through: "2026-06-07")
+      agg.add(assistant(id: "a", cwd: "/Users/me/proj", timestamp: nil))
+
+      assert_equal "unknown", agg.rows.first.date
+    end
+
+    def test_seeded_cells_merge_with_live_records
+      agg = Aggregator.new(timezone: :utc, skip_through: "2026-06-06")
+      agg.seed(project: "/Users/me/proj", date: "2026-06-06", model: "opus-4-8", usage: Usage.new(input: 7))
+      agg.add(assistant(id: "a", cwd: "/Users/me/proj"))
+
+      rows = agg.rows
+
+      assert_equal %w[2026-06-06 2026-06-07], rows.map(&:date)
+      assert_equal 7, rows.first.usage.input
+      assert rows.first.priced?
+    end
+
+    def test_seeded_loose_worktree_names_reattach_to_live_checkouts
+      agg = Aggregator.new(timezone: :utc)
+      agg.seed(project: "carrot", date: "2026-06-06", model: "opus-4-8", usage: Usage.new(input: 7))
+      agg.add(assistant(id: "a", cwd: "/Users/me/teak/carrot"))
+
+      assert_equal [ "/Users/me/teak/carrot" ], agg.rows.map(&:project).uniq
+    end
   end
 end

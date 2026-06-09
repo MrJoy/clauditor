@@ -21,11 +21,22 @@ module Clauditor
         return 1
       end
 
-      aggregator = Aggregator.new(timezone: options[:timezone])
-      loader = SessionLoader.new(root: options[:root])
+      store = options[:store] ? Store.new(root: options[:root], timezone: options[:timezone], dir: options[:store_dir]) : nil
+
+      aggregator = Aggregator.new(timezone: options[:timezone], skip_through: store&.complete_through)
+      store&.each_row do |project, date, model, usage|
+        aggregator.seed(project: project, date: date, model: model, usage: usage)
+      end
+
+      loader = SessionLoader.new(root: options[:root], since: store&.cutoff_time)
       loader.each_record { |record| aggregator.add(record) }
 
-      rows = filter_projects(aggregator.rows, options[:project])
+      rows = aggregator.rows
+      # Persist before filtering: the dataset stays complete even when this
+      # run only displays a subset.
+      store&.save(rows)
+
+      rows = filter_projects(rows, options[:project])
 
       if options[:anthropic]
         out.print Crosstab.for(options[:format]).render(rows, verbose: options[:verbose])
@@ -60,6 +71,8 @@ module Clauditor
         anthropic: false,
         verbose: false,
         project: nil,
+        store: true,
+        store_dir: Store::DEFAULT_DIR,
       }
 
       parser = OptionParser.new do |opts|
@@ -87,6 +100,14 @@ module Clauditor
 
         opts.on("--root DIR", "Session transcripts directory (default: ~/.claude/projects)") do |dir|
           options[:root] = File.expand_path(dir)
+        end
+
+        opts.on("--no-store", "Neither read nor update the persistent dataset") do
+          options[:store] = false
+        end
+
+        opts.on("--store-dir DIR", "Persistent dataset directory (default: ~/.clauditor)") do |dir|
+          options[:store_dir] = File.expand_path(dir)
         end
 
         opts.on("-h", "--help", "Show this help") do

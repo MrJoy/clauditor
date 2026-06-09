@@ -16,7 +16,10 @@ module Clauditor
       end
     end
 
-    def run_cli(args)
+    # The persistent store is disabled by default so tests never touch the
+    # real ~/.clauditor; store-specific tests opt in with their own --store-dir.
+    def run_cli(args, store: false)
+      args = [ "--no-store", *args ] unless store
       out = StringIO.new
       err = StringIO.new
       status = CLI.run(args, out: out, err: err)
@@ -91,6 +94,49 @@ module Clauditor
         _status, out, = run_cli([ "--root", root, "--utc", "--project", "nonexistent" ])
 
         refute_includes out, "opus-4-8"
+      end
+    end
+
+    def test_store_serves_persisted_days_after_transcripts_disappear
+      with_fixture_root do |root|
+        Dir.mktmpdir do |store_dir|
+          args = [ "--root", root, "--utc", "--store-dir", store_dir ]
+          status, out, = run_cli(args, store: true)
+
+          assert_equal 0, status
+          assert_includes out, "2026-06-07"
+
+          # The transcript ages out of Claude Code's retention window; the
+          # completed day must survive via the store.
+          File.delete(File.join(root, "s.jsonl"))
+          status, out, = run_cli(args, store: true)
+
+          assert_equal 0, status
+          assert_includes out, "2026-06-07"
+          assert_includes out, "100"
+        end
+      end
+    end
+
+    def test_store_does_not_persist_the_current_day
+      Dir.mktmpdir do |root|
+        Dir.mktmpdir do |store_dir|
+          now = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+          File.write(File.join(root, "s.jsonl"), <<~JSONL)
+            {"type":"assistant","cwd":"/Users/me/proj","timestamp":"#{now}","message":{"id":"m1","model":"claude-opus-4-8","usage":{"input_tokens":100,"output_tokens":10}}}
+          JSONL
+
+          status, out, = run_cli([ "--root", root, "--utc", "--store-dir", store_dir ], store: true)
+
+          assert_equal 0, status
+          # Today's usage is reported live...
+          assert_includes out, "opus-4-8"
+          # ...but never persisted: it is still accruing.
+          store_files = Dir.glob(File.join(store_dir, "*.json"))
+          assert_equal 1, store_files.size
+          payload = JSON.parse(File.read(store_files.first))
+          assert_empty payload["rows"]
+        end
       end
     end
 
