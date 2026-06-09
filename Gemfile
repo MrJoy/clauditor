@@ -8,7 +8,7 @@ ruby file: ".ruby-version"
 gem "rake"
 # rubocop:enable Bundler/GemVersion
 
-# Removed from Ruby 3.4 default gems; required by lib/tasks/github_export.rake.
+# Removed from Ruby 3.4 default gems.
 gem "csv", "~> 3.3"
 
 group :development do

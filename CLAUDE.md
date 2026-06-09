@@ -51,8 +51,5 @@ Days bucket in **local time** by default; `--utc` switches to UTC. `test_helper.
 
 - `Rakefile` auto-loads every `lib/tasks/**/*.rake` file, so new Rake tasks just need to be dropped
   into `lib/tasks/`.
-- The `Gemfile` references a not-yet-created `lib/tasks/github_export.rake` (the reason `csv` is an
-  explicit dependency — it was removed from Ruby 3.4 default gems). Expect data-export/import tooling
-  to live under `lib/tasks/`.
 - `rake cloc` excludes `data/`, `docs/`, `coverage/`, `vendor/`, etc. — these are the expected
   locations for input session data and generated output.
