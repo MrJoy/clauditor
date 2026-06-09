@@ -10,6 +10,7 @@ module Clauditor
     # Base input/output rates in USD per million tokens, keyed by the
     # normalized model id (see .normalize_model — no "claude-" prefix, no date).
     RATES = {
+      "fable-5" => { input: 10.0, output: 50.0 },
       "opus-4-8" => { input: 5.0, output: 25.0 },
       "opus-4-7" => { input: 5.0, output: 25.0 },
       "opus-4-6" => { input: 5.0, output: 25.0 },
@@ -20,7 +21,7 @@ module Clauditor
     }.freeze
 
     # Display order for model families: least to most capable/expensive.
-    FAMILY_ORDER = %w[haiku sonnet opus].freeze
+    FAMILY_ORDER = %w[haiku sonnet opus fable].freeze
 
     CACHE_READ_MULTIPLIER = 0.1
     CACHE_WRITE_5M_MULTIPLIER = 1.25
@@ -46,7 +47,7 @@ module Clauditor
       RATES.key?(normalize_model(model))
     end
 
-    # Sort key ordering models by family (haiku < sonnet < opus) then version
+    # Sort key ordering models by family (haiku < sonnet < opus < fable) then version
     # ascending, so `opus-4-7` precedes `opus-4-8`. Unknown families sort last,
     # alphabetically.
     def sort_key(model)

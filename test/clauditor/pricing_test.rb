@@ -17,8 +17,17 @@ module Clauditor
     def test_known_handles_dated_and_unknown_models
       assert Pricing.known?("claude-haiku-4-5-20251001")
       assert Pricing.known?("claude-opus-4-8")
+      assert Pricing.known?("claude-fable-5")
       refute Pricing.known?("qwen3.6:27b-coding-nvfp4")
       refute Pricing.known?("<synthetic>")
+    end
+
+    def test_cost_for_applies_fable_5_rates
+      usage = Usage.new(input: 1_000_000, output: 1_000_000)
+
+      expected = 10.0 + 50.0 # input + output at $10/$50 per MTok
+
+      assert_in_delta expected, Pricing.cost_for("claude-fable-5", usage), 1e-9
     end
 
     def test_cost_for_applies_base_and_cache_multipliers
@@ -43,9 +52,9 @@ module Clauditor
     end
 
     def test_sort_key_orders_by_family_then_version
-      models = %w[opus-4-8 haiku-4-5 opus-4-7 sonnet-4-6 sonnet-4-5]
+      models = %w[opus-4-8 haiku-4-5 fable-5 opus-4-7 sonnet-4-6 sonnet-4-5]
 
-      assert_equal %w[haiku-4-5 sonnet-4-5 sonnet-4-6 opus-4-7 opus-4-8],
+      assert_equal %w[haiku-4-5 sonnet-4-5 sonnet-4-6 opus-4-7 opus-4-8 fable-5],
         models.sort_by { |model| Pricing.sort_key(model) }
     end
 
