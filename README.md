@@ -51,6 +51,7 @@ bundle exec bin/clauditor [options]
 | `--no-store` | Neither read nor update the persistent dataset. Forces a full live scan. |
 | `--store-dir DIR` | Persistent dataset directory (default: `~/.clauditor`). |
 | `-h`, `--help` | Show help and exit. |
+| `-v`, `--version` | Show the version and exit. |
 
 ### Output formats
 

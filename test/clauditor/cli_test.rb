@@ -62,6 +62,17 @@ module Clauditor
       assert_includes out.string, "Usage: clauditor"
     end
 
+    def test_version_prints_version_and_exits_zero
+      out = StringIO.new
+      original = $stdout
+      $stdout = out
+      status = CLI.run([ "--version" ])
+      $stdout = original
+
+      assert_equal 0, status
+      assert_includes out.string, "clauditor #{Clauditor::VERSION}"
+    end
+
     def test_anthropic_table_renders_crosstab_with_spanning_header
       with_fixture_root do |root|
         status, out, = run_cli([ "--root", root, "--anthropic", "--utc" ])

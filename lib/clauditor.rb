@@ -5,6 +5,7 @@
 module Clauditor
 end
 
+require_relative "clauditor/version"
 require_relative "clauditor/usage"
 require_relative "clauditor/pricing"
 require_relative "clauditor/project_normalizer"

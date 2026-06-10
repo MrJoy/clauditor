@@ -114,6 +114,11 @@ module Clauditor
           puts opts
           options[:exit] = true
         end
+
+        opts.on("-v", "--version", "Show the version and exit") do
+          puts "clauditor #{Clauditor::VERSION}"
+          options[:exit] = true
+        end
       end
 
       parser.parse(argv)
