@@ -47,7 +47,7 @@ bundle exec bin/clauditor [options]
 | `--anthropic` | Crosstab Anthropic models across columns. Supported with `table` and `csv`; **not** `json`. |
 | `--verbose` | Show full token counts. The table crosstab abbreviates counts with `k`/`m`/`b` suffixes by default; this disables that. (No effect on CSV, which is always full precision.) |
 | `--project NAME` | Only include projects whose path (or its `~`-relative display) contains `NAME`, case-insensitively. |
-| `--root DIR` | Session transcripts directory (default: `~/.claude/projects`). |
+| `--root DIR` | Session transcripts directory (default: `~/.claude/projects`). **Repeatable** — pass `--root` multiple times to scan several trees in one report. Overlapping/nested roots are de-duplicated. |
 | `--no-store` | Neither read nor update the persistent dataset. Forces a full live scan. |
 | `--store-dir DIR` | Persistent dataset directory (default: `~/.clauditor`). |
 | `-h`, `--help` | Show help and exit. |
@@ -85,7 +85,34 @@ bundle exec bin/clauditor --project ~/mrjoy/clauditor --format json
 
 # A one-off live scan that touches neither the stored dataset nor your default root
 bundle exec bin/clauditor --no-store --root /path/to/transcripts
+
+# Several transcript trees in a single report
+bundle exec bin/clauditor --root ~/.claude/projects --root /mnt/backup/claude-projects
 ```
+
+## Config file
+
+Clauditor reads defaults from a YAML file at `~/.clauditor_config`, if present. Every key mirrors a
+flag, so you can set your usual roots and options once instead of typing them each run. **Flags
+passed on the command line override the config file**; for `--root`, any `--root` on the CLI
+*replaces* the config's roots entirely (it does not merge).
+
+```yaml
+# ~/.clauditor_config — all keys optional
+roots:                         # one or more transcript trees (or `root:` for a single string)
+  - ~/.claude/projects
+  - /mnt/backup/claude-projects
+format: table                  # table | csv | json
+utc: false                     # true buckets days by UTC
+anthropic: false               # crosstab Anthropic models across columns
+verbose: false                 # full token counts in the table crosstab
+project: clauditor             # only projects whose path contains this substring
+store: true                    # false is equivalent to --no-store
+store_dir: ~/.clauditor        # persistent dataset directory
+```
+
+An unknown key, an invalid value (e.g. a bad `format`), or malformed YAML aborts with an error. A
+missing file is simply ignored.
 
 ## Notes on cost estimates
 

@@ -18,12 +18,13 @@ module Clauditor
   # the next run. Today's data is still accruing, so it is always recomputed
   # live and never persisted.
   #
-  # Datasets are keyed by (root, timezone) — day bucketing differs between
-  # --utc and local time, and a different --root is a different dataset.
-  # Token counts are persisted rather than costs, so pricing updates apply
-  # retroactively to historical days.
+  # Datasets are keyed by (roots, timezone) — day bucketing differs between
+  # --utc and local time, and a different set of --root dirs is a different
+  # dataset. The root set is sorted and de-duplicated so order and repeats
+  # don't fork the key. Token counts are persisted rather than costs, so
+  # pricing updates apply retroactively to historical days.
   class Store
-    VERSION = 1
+    VERSION = 2
     DEFAULT_DIR = File.expand_path("~/.clauditor")
 
     DATE_PATTERN = /\A\d{4}-\d{2}-\d{2}\z/
@@ -34,8 +35,8 @@ module Clauditor
 
     # `now` is captured once at construction so a run that straddles midnight
     # never marks the day it started — only partially scanned — as complete.
-    def initialize(root:, timezone:, dir: DEFAULT_DIR, now: Time.now)
-      @root = root
+    def initialize(timezone:, root: nil, roots: nil, dir: DEFAULT_DIR, now: Time.now)
+      @roots = Array(roots || root).uniq.sort
       @timezone = timezone
       @dir = dir
       @today = day_of(now)
@@ -79,7 +80,7 @@ module Clauditor
 
       payload = {
         version: VERSION,
-        root: @root,
+        roots: @roots,
         timezone: @timezone.to_s,
         complete_through: (Date.strptime(@today, "%Y-%m-%d") - 1).strftime("%Y-%m-%d"),
         rows: persistable.map { |row| serialize(row) },
@@ -92,7 +93,8 @@ module Clauditor
     end
 
     def path
-      File.join(@dir, "usage-#{@timezone}-#{Digest::SHA256.hexdigest(@root)[0, 12]}.json")
+      key = @roots.join("\n")
+      File.join(@dir, "usage-#{@timezone}-#{Digest::SHA256.hexdigest(key)[0, 12]}.json")
     end
 
     private
@@ -122,7 +124,7 @@ module Clauditor
       data = JSON.parse(File.read(path))
       return empty unless data.is_a?(Hash) &&
         data["version"] == VERSION &&
-        data["root"] == @root &&
+        data["roots"] == @roots &&
         data["timezone"] == @timezone.to_s &&
         DATE_PATTERN.match?(data["complete_through"].to_s) &&
         data["rows"].is_a?(Array)

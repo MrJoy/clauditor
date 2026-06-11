@@ -8,12 +8,12 @@ module Clauditor
   class CLI
     FORMATS = %w[table csv json].freeze
 
-    def self.run(argv, out: $stdout, err: $stderr)
-      new.run(argv, out: out, err: err)
+    def self.run(argv, out: $stdout, err: $stderr, config_path: Config::DEFAULT_PATH)
+      new.run(argv, out: out, err: err, config_path: config_path)
     end
 
-    def run(argv, out: $stdout, err: $stderr)
-      options = parse(argv)
+    def run(argv, out: $stdout, err: $stderr, config_path: Config::DEFAULT_PATH)
+      options = parse(argv, config_path: config_path)
       return 0 if options[:exit]
 
       if options[:anthropic] && options[:format] == "json"
@@ -21,14 +21,14 @@ module Clauditor
         return 1
       end
 
-      store = options[:store] ? Store.new(root: options[:root], timezone: options[:timezone], dir: options[:store_dir]) : nil
+      store = options[:store] ? Store.new(roots: options[:roots], timezone: options[:timezone], dir: options[:store_dir]) : nil
 
       aggregator = Aggregator.new(timezone: options[:timezone], skip_through: store&.complete_through)
       store&.each_row do |project, date, model, usage|
         aggregator.seed(project: project, date: date, model: model, usage: usage)
       end
 
-      loader = SessionLoader.new(root: options[:root], since: store&.cutoff_time)
+      loader = SessionLoader.new(roots: options[:roots], since: store&.cutoff_time)
       loader.each_record { |record| aggregator.add(record) }
 
       rows = aggregator.rows
@@ -63,17 +63,22 @@ module Clauditor
       end
     end
 
-    def parse(argv)
+    def parse(argv, config_path: Config::DEFAULT_PATH)
+      # Precedence: built-in defaults < config file < flags passed on the CLI.
       options = {
         format: "table",
         timezone: :local,
-        root: SessionLoader::DEFAULT_ROOT,
+        roots: [ SessionLoader::DEFAULT_ROOT ],
         anthropic: false,
         verbose: false,
         project: nil,
         store: true,
         store_dir: Store::DEFAULT_DIR,
-      }
+      }.merge(Config.load(path: config_path))
+
+      # --root is repeatable and *replaces* config roots wholesale (flags beat
+      # config); collected separately so an absent flag leaves config intact.
+      cli_roots = []
 
       parser = OptionParser.new do |opts|
         opts.banner = "Usage: clauditor [options]"
@@ -98,8 +103,8 @@ module Clauditor
           options[:project] = name
         end
 
-        opts.on("--root DIR", "Session transcripts directory (default: ~/.claude/projects)") do |dir|
-          options[:root] = File.expand_path(dir)
+        opts.on("--root DIR", "Session transcripts directory; repeatable (default: ~/.claude/projects)") do |dir|
+          cli_roots << File.expand_path(dir)
         end
 
         opts.on("--no-store", "Neither read nor update the persistent dataset") do
@@ -122,6 +127,7 @@ module Clauditor
       end
 
       parser.parse(argv)
+      options[:roots] = cli_roots unless cli_roots.empty?
       options
     end
   end

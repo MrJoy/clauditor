@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `--root` is now repeatable, so a single report can span several transcript
+  trees. Overlapping/nested roots are de-duplicated.
+- Optional YAML config at `~/.clauditor_config` supplying defaults for every
+  option. Command-line flags override the config file.
+
+### Changed
+
+- The persistent dataset is now keyed by the (sorted, de-duplicated) root set
+  rather than a single root. Existing single-root caches are invalidated once
+  and rebuilt on the next run.
+
 ## [0.0.1] - 2026-06-10
 
 ### Added

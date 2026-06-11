@@ -92,12 +92,12 @@ module Clauditor
       end
     end
 
-    def test_mismatched_version_or_root_is_treated_as_empty
+    def test_mismatched_version_or_roots_is_treated_as_empty
       Dir.mktmpdir do |dir|
         path = build(dir).path
         payload = {
           version: Store::VERSION + 1,
-          root: "/sessions",
+          roots: [ "/sessions" ],
           timezone: "utc",
           complete_through: "2026-06-08",
           rows: [],
@@ -105,18 +105,38 @@ module Clauditor
         File.write(path, JSON.generate(payload))
         assert_nil build(dir).complete_through
 
-        File.write(path, JSON.generate(payload.merge(version: Store::VERSION, root: "/elsewhere")))
+        File.write(path, JSON.generate(payload.merge(version: Store::VERSION, roots: [ "/elsewhere" ])))
         assert_nil build(dir).complete_through
       end
     end
 
-    def test_store_files_are_keyed_by_root_and_timezone
+    def test_store_files_are_keyed_by_roots_and_timezone
       Dir.mktmpdir do |dir|
-        utc = Store.new(root: "/sessions", timezone: :utc, dir: dir, now: NOW)
-        local = Store.new(root: "/sessions", timezone: :local, dir: dir, now: NOW)
-        other = Store.new(root: "/other", timezone: :utc, dir: dir, now: NOW)
+        utc = Store.new(roots: [ "/sessions" ], timezone: :utc, dir: dir, now: NOW)
+        local = Store.new(roots: [ "/sessions" ], timezone: :local, dir: dir, now: NOW)
+        other = Store.new(roots: [ "/other" ], timezone: :utc, dir: dir, now: NOW)
+        many = Store.new(roots: [ "/sessions", "/other" ], timezone: :utc, dir: dir, now: NOW)
 
-        assert_equal 3, [ utc.path, local.path, other.path ].uniq.size
+        assert_equal 4, [ utc.path, local.path, other.path, many.path ].uniq.size
+      end
+    end
+
+    def test_root_set_key_ignores_order_and_duplicates
+      Dir.mktmpdir do |dir|
+        canonical = Store.new(roots: [ "/a", "/b" ], timezone: :utc, dir: dir, now: NOW)
+        shuffled = Store.new(roots: [ "/b", "/a", "/a" ], timezone: :utc, dir: dir, now: NOW)
+
+        assert_equal canonical.path, shuffled.path
+      end
+    end
+
+    def test_single_root_roundtrips_across_roots_and_root_aliases
+      Dir.mktmpdir do |dir|
+        Store.new(roots: [ "/sessions" ], timezone: :utc, dir: dir, now: NOW).save([ row ])
+        store = Store.new(root: "/sessions", timezone: :utc, dir: dir, now: NOW)
+
+        assert_equal "2026-06-08", store.complete_through
+        assert_equal "2026-06-07", cells(store).first[1]
       end
     end
   end

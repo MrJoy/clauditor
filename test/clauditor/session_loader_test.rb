@@ -39,6 +39,32 @@ module Clauditor
       end
     end
 
+    def test_reads_records_across_multiple_roots
+      Dir.mktmpdir do |a|
+        Dir.mktmpdir do |b|
+          File.write(File.join(a, "s.jsonl"), %({"type":"assistant"}\n))
+          File.write(File.join(b, "s.jsonl"), %({"type":"system"}\n))
+
+          records = SessionLoader.new(roots: [ a, b ]).each_record.to_a
+
+          assert_equal %w[assistant system], records.map { |r| r["type"] }.sort
+        end
+      end
+    end
+
+    def test_overlapping_roots_do_not_read_the_same_file_twice
+      Dir.mktmpdir do |root|
+        nested = File.join(root, "nested")
+        FileUtils.mkdir_p(nested)
+        File.write(File.join(nested, "s.jsonl"), %({"type":"assistant"}\n))
+
+        # The parent already globs into nested; passing both must not duplicate.
+        records = SessionLoader.new(roots: [ root, nested ]).each_record.to_a
+
+        assert_equal 1, records.size
+      end
+    end
+
     def test_each_record_without_block_returns_enumerator
       Dir.mktmpdir do |root|
         File.write(File.join(root, "s.jsonl"), %({"type":"assistant"}\n))

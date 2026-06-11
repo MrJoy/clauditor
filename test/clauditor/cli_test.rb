@@ -18,11 +18,14 @@ module Clauditor
 
     # The persistent store is disabled by default so tests never touch the
     # real ~/.clauditor; store-specific tests opt in with their own --store-dir.
-    def run_cli(args, store: false)
+    # config_path likewise points at a nonexistent file by default so tests
+    # never pick up the developer's real ~/.clauditor_config; config tests pass
+    # their own path.
+    def run_cli(args, store: false, config_path: File.join(Dir.tmpdir, "clauditor-test-absent-config"))
       args = [ "--no-store", *args ] unless store
       out = StringIO.new
       err = StringIO.new
-      status = CLI.run(args, out: out, err: err)
+      status = CLI.run(args, out: out, err: err, config_path: config_path)
       [ status, out.string, err.string ]
     end
 
@@ -156,6 +159,81 @@ module Clauditor
 
       assert_equal 1, status
       assert_includes err, "clauditor:"
+    end
+
+    def test_multiple_root_flags_scan_every_root
+      with_fixture_root do |a|
+        Dir.mktmpdir do |b|
+          File.write(File.join(b, "s.jsonl"), <<~JSONL)
+            {"type":"assistant","cwd":"/Users/me/other","timestamp":"2026-06-07T12:00:00.000Z","message":{"id":"b1","model":"claude-haiku-4-5","usage":{"input_tokens":50,"output_tokens":5}}}
+          JSONL
+
+          status, out, = run_cli([ "--root", a, "--root", b, "--utc" ])
+
+          assert_equal 0, status
+          assert_includes out, "opus-4-8"
+          assert_includes out, "haiku-4-5"
+        end
+      end
+    end
+
+    def test_config_roots_used_when_no_root_flag
+      with_fixture_root do |root|
+        with_config("roots:\n  - #{root}\nutc: true\n") do |config_path|
+          status, out, = run_cli([], config_path: config_path)
+
+          assert_equal 0, status
+          assert_includes out, "opus-4-8"
+        end
+      end
+    end
+
+    def test_cli_root_replaces_config_roots
+      with_fixture_root do |cli_root|
+        Dir.mktmpdir do |config_root|
+          File.write(File.join(config_root, "s.jsonl"), <<~JSONL)
+            {"type":"assistant","cwd":"/Users/me/other","timestamp":"2026-06-07T12:00:00.000Z","message":{"id":"c1","model":"claude-haiku-4-5","usage":{"input_tokens":50,"output_tokens":5}}}
+          JSONL
+          with_config("roots:\n  - #{config_root}\nutc: true\n") do |config_path|
+            status, out, = run_cli([ "--root", cli_root ], config_path: config_path)
+
+            assert_equal 0, status
+            assert_includes out, "opus-4-8"      # from the CLI root
+            refute_includes out, "haiku-4-5"     # config root was replaced, not merged
+          end
+        end
+      end
+    end
+
+    def test_flag_overrides_config_non_root_option
+      with_fixture_root do |root|
+        with_config("format: json\nutc: true\n") do |config_path|
+          # Config selects json; absent a --format flag it is honored.
+          _status, out, = run_cli([ "--root", root ], config_path: config_path)
+          assert_equal 100, JSON.parse(out).first["input_tokens"]
+
+          # An explicit flag wins over the config value.
+          _status, out, = run_cli([ "--root", root, "--format", "table" ], config_path: config_path)
+          assert_includes out, "TOTAL"
+        end
+      end
+    end
+
+    def test_malformed_config_reports_error_and_nonzero_status
+      with_config("format: nope\n") do |config_path|
+        status, _out, err = run_cli([], config_path: config_path)
+
+        assert_equal 1, status
+        assert_includes err, "clauditor:"
+      end
+    end
+
+    def with_config(body)
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "clauditor_config")
+        File.write(path, body)
+        yield path
+      end
     end
   end
 end

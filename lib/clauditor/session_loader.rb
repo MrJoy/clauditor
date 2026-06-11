@@ -9,17 +9,20 @@ module Clauditor
   class SessionLoader
     DEFAULT_ROOT = File.expand_path("~/.claude/projects")
 
-    # since: skip files last modified before this Time. Record timestamps
-    # never exceed the file's mtime (lines are appended as events happen), so
-    # an untouched file can only contain records from days the Store already
-    # covers.
-    def initialize(root: DEFAULT_ROOT, since: nil)
-      @root = root
+    # Scans one or more roots: pass a single `root:` or a `roots:` list (both
+    # default to ~/.claude/projects). since: skip files last modified before
+    # this Time. Record timestamps never exceed the file's mtime (lines are
+    # appended as events happen), so an untouched file can only contain records
+    # from days the Store already covers.
+    def initialize(root: nil, roots: nil, since: nil)
+      @roots = Array(roots || root || DEFAULT_ROOT)
       @since = since
     end
 
+    # Globs every root and de-duplicates: roots may nest (a parent already
+    # globs into its children), and the same file must not be read twice.
     def files
-      found = Dir.glob(File.join(@root, "**", "*.jsonl"))
+      found = @roots.flat_map { |root| Dir.glob(File.join(root, "**", "*.jsonl")) }.uniq
       return found unless @since
 
       found.select { |file| File.mtime(file) >= @since }
