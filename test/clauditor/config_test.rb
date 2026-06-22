@@ -31,6 +31,8 @@ module Clauditor
         anthropic: true
         verbose: true
         project: clauditor
+        remap:
+          /private/tmp/gone: ~/real
         store: false
         store_dir: ~/store
       YAML
@@ -42,8 +44,36 @@ module Clauditor
         assert_equal true, options[:anthropic]
         assert_equal true, options[:verbose]
         assert_equal "clauditor", options[:project]
+        assert_equal({ "/private/tmp/gone" => File.expand_path("~/real") }, options[:remap])
         assert_equal false, options[:store]
         assert_equal File.expand_path("~/store"), options[:store_dir]
+      end
+    end
+
+    def test_remap_expands_both_sides
+      with_config(<<~YAML) do |path|
+        remap:
+          /private/tmp/pr1887-rereview3: ~/Unity/Games/3DTDF2P
+          ~/old/checkout: /Users/me/new
+      YAML
+        remap = Config.load(path: path)[:remap]
+
+        assert_equal File.expand_path("~/Unity/Games/3DTDF2P"), remap["/private/tmp/pr1887-rereview3"]
+        assert_equal "/Users/me/new", remap[File.expand_path("~/old/checkout")]
+      end
+    end
+
+    def test_remap_non_mapping_raises
+      with_config("remap: just-a-string\n") do |path|
+        error = assert_raises(ArgumentError) { Config.load(path: path) }
+        assert_includes error.message, "must be a mapping"
+      end
+    end
+
+    def test_remap_empty_target_raises
+      with_config("remap:\n  /a: \"\"\n") do |path|
+        error = assert_raises(ArgumentError) { Config.load(path: path) }
+        assert_includes error.message, "non-empty path"
       end
     end
 

@@ -23,7 +23,7 @@ module Clauditor
 
       store = options[:store] ? Store.new(roots: options[:roots], timezone: options[:timezone], dir: options[:store_dir]) : nil
 
-      aggregator = Aggregator.new(timezone: options[:timezone], skip_through: store&.complete_through)
+      aggregator = Aggregator.new(timezone: options[:timezone], skip_through: store&.complete_through, remap: options[:remap])
       store&.each_row do |project, date, model, usage|
         aggregator.seed(project: project, date: date, model: model, usage: usage)
       end
@@ -77,6 +77,7 @@ module Clauditor
         anthropic: false,
         verbose: false,
         project: nil,
+        remap: {},
         store: true,
         store_dir: Store::DEFAULT_DIR,
       }.merge(Config.load(path: config_path))

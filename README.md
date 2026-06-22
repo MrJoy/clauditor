@@ -93,9 +93,9 @@ bundle exec bin/clauditor --root ~/.claude/projects --root /mnt/backup/claude-pr
 ## Config file
 
 Clauditor reads defaults from a YAML file at `~/.clauditor_config`, if present. Every key mirrors a
-flag, so you can set your usual roots and options once instead of typing them each run. **Flags
-passed on the command line override the config file**; for `--root`, any `--root` on the CLI
-*replaces* the config's roots entirely (it does not merge).
+flag — except `remap`, which is config-only — so you can set your usual roots and options once
+instead of typing them each run. **Flags passed on the command line override the config file**; for
+`--root`, any `--root` on the CLI *replaces* the config's roots entirely (it does not merge).
 
 ```yaml
 # ~/.clauditor_config — all keys optional
@@ -107,9 +107,17 @@ utc: false                     # true buckets days by UTC
 anthropic: false               # crosstab Anthropic models across columns
 verbose: false                 # full token counts in the table crosstab
 project: clauditor             # only projects whose path contains this substring
+remap:                         # fold stray project paths onto a canonical one
+  /private/tmp/pr1887-rereview3: ~/Unity/Games/3DTDF2P
 store: true                    # false is equivalent to --no-store
 store_dir: ~/.clauditor        # persistent dataset directory
 ```
+
+`remap` is a mapping of *project path you see in the report* → *project it really belongs to*. It's
+meant for projects Clauditor can't reattach on its own — most often a long-gone git worktree whose
+checkout no longer exists on disk, so the usual repo-root detection can't fold it back. Both sides
+accept `~`. Each listed project's usage is merged into the target (and stays merged in the
+persistent dataset), so it lines up with the real checkout's totals.
 
 An unknown key, an invalid value (e.g. a bad `format`), or malformed YAML aborts with an error. A
 missing file is simply ignored.

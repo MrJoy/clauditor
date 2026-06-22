@@ -255,6 +255,21 @@ module Clauditor
       end
     end
 
+    def test_config_remap_folds_stray_project_onto_canonical
+      Dir.mktmpdir do |root|
+        File.write(File.join(root, "s.jsonl"), <<~JSONL)
+          {"type":"assistant","cwd":"/private/tmp/pr1887-rereview3","timestamp":"2026-06-07T12:00:00.000Z","message":{"id":"m1","model":"claude-opus-4-8","usage":{"input_tokens":100,"output_tokens":10}}}
+        JSONL
+        with_config("remap:\n  /private/tmp/pr1887-rereview3: /Users/me/Unity/3DTDF2P\nutc: true\n") do |config_path|
+          status, out, = run_cli([ "--root", root ], config_path: config_path)
+
+          assert_equal 0, status
+          assert_includes out, "/Users/me/Unity/3DTDF2P"
+          refute_includes out, "pr1887-rereview3"
+        end
+      end
+    end
+
     def test_malformed_config_reports_error_and_nonzero_status
       with_config("format: nope\n") do |config_path|
         status, _out, err = run_cli([], config_path: config_path)

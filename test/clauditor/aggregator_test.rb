@@ -89,6 +89,31 @@ module Clauditor
       assert_equal 300, rows.first.usage.input
     end
 
+    def test_remap_folds_stray_project_onto_canonical
+      # A long-gone worktree: no .git on disk, so repo_root leaves it as-is.
+      remap = { "/private/tmp/pr1887" => "/Users/me/games/tdf" }
+      agg = Aggregator.new(timezone: :utc, remap: remap)
+      agg.add(assistant(id: "a", cwd: "/private/tmp/pr1887"))
+      agg.add(assistant(id: "b", cwd: "/Users/me/games/tdf"))
+
+      rows = agg.rows
+
+      assert_equal 1, rows.size
+      assert_equal "/Users/me/games/tdf", rows.first.project
+      assert_equal 200, rows.first.usage.input
+    end
+
+    def test_remap_applies_to_seeded_cells
+      remap = { "/private/tmp/pr1887" => "/Users/me/games/tdf" }
+      agg = Aggregator.new(timezone: :utc, remap: remap)
+      agg.seed(project: "/private/tmp/pr1887", date: "2026-06-07", model: "opus-4-8", usage: Usage.new(input: 5))
+
+      rows = agg.rows
+
+      assert_equal [ "/Users/me/games/tdf" ], rows.map(&:project)
+      assert_equal 5, rows.first.usage.input
+    end
+
     def test_dated_and_undated_claude_models_collapse_into_one_row
       agg = Aggregator.new(timezone: :utc)
       agg.add(assistant(id: "a", cwd: "/Users/me/proj", model: "claude-haiku-4-5-20251001"))

@@ -43,6 +43,8 @@ module Clauditor
           options[:verbose] = boolean(value, "verbose", path)
         when "project"
           options[:project] = value&.to_s
+        when "remap"
+          options[:remap] = remap(value, path)
         when "store"
           options[:store] = boolean(value, "store", path)
         when "store_dir"
@@ -61,6 +63,23 @@ module Clauditor
       end
 
       list.map { |dir| File.expand_path(dir) }
+    end
+
+    # Config-only (no CLI equivalent): a mapping of project path => project
+    # path that folds stray project keys — typically long-gone worktrees the
+    # repo-root walk can no longer resolve — onto a canonical project. Both
+    # sides are expanded so `~` works; the source should be the project path as
+    # it appears in the report.
+    def self.remap(value, path)
+      raise ArgumentError, "#{path}: 'remap' must be a mapping of project => project" unless value.is_a?(Hash)
+
+      value.each_with_object({}) do |(from, to), mapping|
+        unless from.is_a?(String) && to.is_a?(String) && !from.strip.empty? && !to.strip.empty?
+          raise ArgumentError, "#{path}: 'remap' entries must map a path to a non-empty path"
+        end
+
+        mapping[File.expand_path(from)] = File.expand_path(to)
+      end
     end
 
     def self.format(value, path)

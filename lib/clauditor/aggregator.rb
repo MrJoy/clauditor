@@ -25,10 +25,14 @@ module Clauditor
     # the given "YYYY-MM-DD" day — those days come pre-aggregated from the
     # Store via #seed, and counting them again (e.g. a resumed session
     # replaying old messages into a new file) would double them.
-    def initialize(timezone: :local, repo_root: ProjectNormalizer.method(:repo_root), skip_through: nil)
+    # remap is a user-supplied { project => project } hash (from the config
+    # file) applied last, after the automatic worktree reattachment, to fold
+    # stray project keys (typically long-gone worktrees) onto a canonical one.
+    def initialize(timezone: :local, repo_root: ProjectNormalizer.method(:repo_root), skip_through: nil, remap: {})
       @timezone = timezone
       @repo_root = repo_root
       @skip_through = skip_through
+      @remap = remap
       @repo_root_cache = {}
       @seen_message_ids = {}
       @groups = Hash.new { |h, k| h[k] = Usage.new }
@@ -86,6 +90,7 @@ module Clauditor
       merged = Hash.new { |h, k| h[k] = Usage.new }
       @groups.each do |(project, date, model), usage|
         canonical = remap.fetch(project, project)
+        canonical = @remap.fetch(canonical, canonical)
         merged[[ canonical, date, model ]] += usage
       end
 
