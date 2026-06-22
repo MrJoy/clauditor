@@ -50,6 +50,26 @@ module Clauditor
       assert_includes output, "—" # unpriced model
     end
 
+    def test_table_drops_project_column_when_hidden
+      output = Formatters::Table.render(rows, hide_project: true)
+      header = output.lines.first
+
+      refute_includes header, "Project"
+      refute_includes output, "~/teak/carrot"
+      assert header.start_with?("Date"), "Date should lead the header, got: #{header.inspect}"
+      assert_includes output, "Model"
+      assert_includes output, "TOTAL" # totals label survives in the Date column
+      assert_includes output, "$1,234.57"
+    end
+
+    def test_csv_ignores_hide_project
+      assert_equal Formatters::Csv.render(rows), Formatters::Csv.render(rows, hide_project: true)
+    end
+
+    def test_json_ignores_hide_project
+      assert_equal Formatters::Json.render(rows), Formatters::Json.render(rows, hide_project: true)
+    end
+
     def test_csv_has_header_and_blank_cost_for_unpriced
       output = Formatters::Csv.render(rows)
       table = CSV.parse(output, headers: true)

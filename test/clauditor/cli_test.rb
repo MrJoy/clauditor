@@ -103,6 +103,42 @@ module Clauditor
       end
     end
 
+    def test_project_filter_to_single_project_hides_project_column
+      with_fixture_root do |root|
+        status, out, = run_cli([ "--root", root, "--utc", "--project", "proj" ])
+
+        assert_equal 0, status
+        refute_includes out, "Project"
+        assert out.lines.first.start_with?("Date"), "Date should lead the header"
+      end
+    end
+
+    def test_unfiltered_run_keeps_project_column
+      with_fixture_root do |root|
+        status, out, = run_cli([ "--root", root, "--utc" ])
+
+        assert_equal 0, status
+        assert_includes out, "Project"
+      end
+    end
+
+    def test_project_filter_matching_multiple_projects_keeps_column
+      with_fixture_root do |a|
+        Dir.mktmpdir do |b|
+          File.write(File.join(b, "s.jsonl"), <<~JSONL)
+            {"type":"assistant","cwd":"/Users/me/project-two","timestamp":"2026-06-07T12:00:00.000Z","message":{"id":"b1","model":"claude-haiku-4-5","usage":{"input_tokens":50,"output_tokens":5}}}
+          JSONL
+
+          # "proj" matches both /Users/me/proj and /Users/me/project-two, so the
+          # column stays.
+          status, out, = run_cli([ "--root", a, "--root", b, "--utc", "--project", "proj" ])
+
+          assert_equal 0, status
+          assert_includes out, "Project"
+        end
+      end
+    end
+
     def test_project_filter_excludes_non_matching
       with_fixture_root do |root|
         _status, out, = run_cli([ "--root", root, "--utc", "--project", "nonexistent" ])

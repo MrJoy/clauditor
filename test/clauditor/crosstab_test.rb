@@ -60,6 +60,22 @@ module Clauditor
       assert_operator top.index("opus-4-8"), :>, top.index("haiku-4-5")
     end
 
+    def test_table_drops_project_column_when_hidden
+      single = rows.select { |r| r.project == "/Users/me/a" }
+      lines = Crosstab::Table.render(single, hide_project: true).lines
+
+      assert_includes lines[1], "Date"
+      refute_includes lines[1], "Project"
+      refute(lines.any? { |line| line.include?("/Users/me/a") })
+      # Model columns still render alongside the totals row.
+      assert_includes lines[1], "Tokens"
+      assert(lines.any? { |line| line.start_with?("TOTAL") })
+    end
+
+    def test_csv_ignores_hide_project
+      assert_equal Crosstab::Csv.render(rows), Crosstab::Csv.render(rows, hide_project: true)
+    end
+
     def test_table_totals_each_model_column
       total_line = Crosstab::Table.render(rows).lines.find { |line| line.start_with?("TOTAL") }
 

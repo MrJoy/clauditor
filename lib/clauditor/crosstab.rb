@@ -46,26 +46,27 @@ module Clauditor
       # Token counts are abbreviated with scale suffixes (k/m/b) unless
       # verbose; costs are always shown in full. A trailing "Total" group sums
       # tokens and cost across every model for the (day, project) row.
-      def render(rows, verbose: false)
+      def render(rows, verbose: false, hide_project: false)
         models, keys, cells = Crosstab.pivot(rows)
         groups = models + [ TOTAL_GROUP ]
 
-        flat_headers = LABELS + groups.flat_map { SUBCOLUMNS }
-        data = keys.map { |key| data_row(key, models, cells, verbose) }
-        total = totals_row(models, cells, verbose)
+        labels = hide_project ? LABELS.take(1) : LABELS
+        flat_headers = labels + groups.flat_map { SUBCOLUMNS }
+        data = keys.map { |key| data_row(key, models, cells, verbose, hide_project) }
+        total = totals_row(models, cells, verbose, hide_project)
 
-        widths = widen_for_model_names(flat_widths(flat_headers, data + [ total ]), groups)
-        aligns = [ :left, :left ] + Array.new(groups.size * 2, :right)
+        widths = widen_for_model_names(flat_widths(flat_headers, data + [ total ]), groups, labels.size)
+        aligns = Array.new(labels.size, :left) + Array.new(groups.size * 2, :right)
 
-        lines = [ top_header(groups, widths), format_flat(flat_headers, widths, aligns), separator(widths) ]
+        lines = [ top_header(groups, widths, labels.size), format_flat(flat_headers, widths, aligns), separator(widths) ]
         data.each { |row| lines << format_flat(row, widths, aligns) }
         lines << separator(widths)
         lines << format_flat(total, widths, aligns)
         "#{lines.join("\n")}\n"
       end
 
-      def data_row(key, models, cells, verbose)
-        row = [ key.first, ProjectNormalizer.display(key.last) ]
+      def data_row(key, models, cells, verbose, hide_project)
+        row = hide_project ? [ key.first ] : [ key.first, ProjectNormalizer.display(key.last) ]
         present = models.filter_map { |model| cells[key][model] }
         models.each do |model|
           cell = cells[key][model]
@@ -77,8 +78,8 @@ module Clauditor
         row
       end
 
-      def totals_row(models, cells, verbose)
-        row = [ "TOTAL", "" ]
+      def totals_row(models, cells, verbose, hide_project)
+        row = hide_project ? [ "TOTAL" ] : [ "TOTAL", "" ]
         all = cells.values.flat_map(&:values)
         models.each do |model|
           present = cells.values.filter_map { |by_model| by_model[model] }
@@ -103,10 +104,10 @@ module Clauditor
       # Ensure each group's (Tokens, Cost) pair is at least as wide as the
       # heading that spans it (a model name, or "Total"), padding the Cost
       # column to absorb any deficit.
-      def widen_for_model_names(widths, groups)
+      def widen_for_model_names(widths, groups, label_count)
         widths = widths.dup
         groups.each_with_index do |group, index|
-          tokens_col = 2 + (index * 2)
+          tokens_col = label_count + (index * 2)
           cost_col = tokens_col + 1
           deficit = group.length - (widths[tokens_col] + GAP.length + widths[cost_col])
           widths[cost_col] += deficit if deficit.positive?
@@ -114,10 +115,11 @@ module Clauditor
         widths
       end
 
-      def top_header(groups, widths)
-        segments = [ " " * (widths[0] + GAP.length + widths[1]) ]
+      def top_header(groups, widths, label_count)
+        prefix_width = (0...label_count).sum { |col| widths[col] } + GAP.length * (label_count - 1)
+        segments = [ " " * prefix_width ]
         groups.each_with_index do |group, index|
-          tokens_col = 2 + (index * 2)
+          tokens_col = label_count + (index * 2)
           span = widths[tokens_col] + GAP.length + widths[tokens_col + 1]
           segments << group.center(span)
         end
@@ -142,10 +144,12 @@ module Clauditor
 
       METRICS = [ "Input", "Output", "Cache Write", "Cache Read", "Cost" ].freeze
 
-      # verbose is accepted for a uniform interface but ignored — CSV always
-      # carries full-precision numbers.
-      def render(rows, verbose: false)
+      # verbose and hide_project are accepted for a uniform interface but
+      # ignored — CSV always carries full-precision numbers and the project
+      # column.
+      def render(rows, verbose: false, hide_project: false)
         _ = verbose
+        _ = hide_project
         models, keys, cells = Crosstab.pivot(rows)
 
         CSV.generate do |csv|

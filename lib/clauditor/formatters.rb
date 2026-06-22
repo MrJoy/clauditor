@@ -51,26 +51,28 @@ module Clauditor
 
       HEADERS = [ "Project", "Date", "Model", "Input", "Output", "Cache Write", "Cache Read", "Cost" ].freeze
 
-      def render(rows)
-        table = rows.map { |row| columns(row) }
-        table << totals_row(rows)
+      # When hide_project is set the leading Project column is dropped — used
+      # when the output has been filtered down to a single project.
+      def render(rows, hide_project: false)
+        headers = hide_project ? HEADERS.drop(1) : HEADERS
+        table = rows.map { |row| columns(row, hide_project) }
+        table << totals_row(rows, hide_project)
+        label_cols = hide_project ? 2 : 3
 
-        widths = column_widths(table)
+        widths = column_widths(headers, table)
         lines = []
-        lines << format_row(HEADERS, widths)
+        lines << format_row(headers, widths, label_cols)
         lines << separator(widths)
         table.each_with_index do |cols, index|
           lines << separator(widths) if index == table.size - 1
-          lines << format_row(cols, widths)
+          lines << format_row(cols, widths, label_cols)
         end
         "#{lines.join("\n")}\n"
       end
 
-      def columns(row)
-        [
-          ProjectNormalizer.display(row.project),
-          row.date,
-          row.model,
+      def columns(row, hide_project = false)
+        labels = hide_project ? [ row.date, row.model ] : [ ProjectNormalizer.display(row.project), row.date, row.model ]
+        labels + [
           Formatters.delimit(row.usage.input),
           Formatters.delimit(row.usage.output),
           Formatters.delimit(row.usage.cache_write),
@@ -79,13 +81,13 @@ module Clauditor
         ]
       end
 
-      def totals_row(rows)
+      # "TOTAL" sits in the leading label column — the Project column normally,
+      # or the Date column once Project is hidden.
+      def totals_row(rows, hide_project = false)
         usage = rows.map(&:usage).reduce(Usage.new, :+)
         priced = rows.select(&:priced?).sum(&:cost)
-        [
-          "TOTAL",
-          "",
-          "",
+        labels = hide_project ? [ "TOTAL", "" ] : [ "TOTAL", "", "" ]
+        labels + [
           Formatters.delimit(usage.input),
           Formatters.delimit(usage.output),
           Formatters.delimit(usage.cache_write),
@@ -98,16 +100,18 @@ module Clauditor
         cost.nil? ? "—" : "$#{Formatters.delimit_decimal(cost)}"
       end
 
-      def column_widths(table)
-        HEADERS.each_index.map do |col|
-          ([ HEADERS[col].length ] + table.map { |cols| cols[col].length }).max
+      def column_widths(headers, table)
+        headers.each_index.map do |col|
+          ([ headers[col].length ] + table.map { |cols| cols[col].length }).max
         end
       end
 
-      # Project, Date, Model left-aligned; numeric columns right-aligned.
-      def format_row(cols, widths)
+      # The leading label columns (Project, Date, Model) are left-aligned;
+      # numeric columns right-aligned. label_cols drops to 2 when Project is
+      # hidden.
+      def format_row(cols, widths, label_cols)
         cols.each_with_index.map do |value, col|
-          col < 3 ? value.ljust(widths[col]) : value.rjust(widths[col])
+          col < label_cols ? value.ljust(widths[col]) : value.rjust(widths[col])
         end.join("  ").rstrip
       end
 
@@ -120,7 +124,10 @@ module Clauditor
     module Csv
       module_function
 
-      def render(rows)
+      # hide_project is accepted for a uniform interface but ignored — the
+      # machine-readable formats always carry the project column.
+      def render(rows, hide_project: false)
+        _ = hide_project
         CSV.generate do |csv|
           csv << [
             "project", "date", "model",
@@ -149,7 +156,10 @@ module Clauditor
     module Json
       module_function
 
-      def render(rows)
+      # hide_project is accepted for a uniform interface but ignored — the
+      # machine-readable formats always carry the project key.
+      def render(rows, hide_project: false)
+        _ = hide_project
         payload = rows.map do |row|
           {
             project: ProjectNormalizer.display(row.project),

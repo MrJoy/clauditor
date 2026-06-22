@@ -38,10 +38,15 @@ module Clauditor
 
       rows = filter_projects(rows, options[:project])
 
+      # When a --project filter has narrowed the output to a single project the
+      # project column is redundant; drop it from the human-readable views
+      # (CSV/JSON keep it, and ignore the flag).
+      hide_project = !options[:project].nil? && rows.map(&:project).uniq.size == 1
+
       if options[:anthropic]
-        out.print Crosstab.for(options[:format]).render(rows, verbose: options[:verbose])
+        out.print Crosstab.for(options[:format]).render(rows, verbose: options[:verbose], hide_project: hide_project)
       else
-        out.print Formatters.for(options[:format]).render(rows)
+        out.print Formatters.for(options[:format]).render(rows, hide_project: hide_project)
       end
       0
     rescue OptionParser::ParseError, ArgumentError => e
