@@ -47,6 +47,34 @@ module Clauditor
       assert_equal %w[haiku-4-5 sonnet-4-6 opus-4-7 opus-4-8], models
     end
 
+    def test_pivot_summary_merges_each_family_into_one_column
+      varied = [
+        row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-7", input: 100, cost: 1.0),
+        row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 50, cost: 0.5),
+        row(project: "/Users/me/a", date: "2026-06-07", model: "sonnet-5", input: 10, cost: 0.1),
+      ]
+
+      models, _keys, cells = Crosstab.pivot(varied, summary: true)
+
+      assert_equal %w[sonnet opus], models
+      cell = cells[[ "2026-06-07", "/Users/me/a" ]]["opus"]
+      assert_equal 150, cell.usage.input # 100 + 50 across opus-4-7 and opus-4-8
+      assert_in_delta 1.5, cell.cost, 1e-9 # already-computed costs summed
+    end
+
+    def test_table_summary_drops_version_from_headers
+      varied = [
+        row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-7", input: 100, cost: 1.0),
+        row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 50, cost: 0.5),
+      ]
+
+      top = Crosstab::Table.render(varied, summary: true).lines[0]
+
+      assert_includes top, "opus"
+      refute_includes top, "opus-4-7"
+      refute_includes top, "opus-4-8"
+    end
+
     def test_table_has_spanning_model_header_and_subcolumns
       lines = Crosstab::Table.render(rows).lines
 

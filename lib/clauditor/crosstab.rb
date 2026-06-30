@@ -27,12 +27,44 @@ module Clauditor
     #   models — sorted Anthropic model ids present in the data
     #   keys   — sorted [date, project] pairs, one per output row
     #   cells  — { [date, project] => { model => Aggregator::Row } }
-    def pivot(rows)
+    #
+    # With summary:, each model id is reduced to its bare family
+    # (opus-4-8 → opus) so every version of a model shares one column; rows that
+    # then collide in a cell are merged (usage and already-computed cost summed,
+    # so mixed-priced versions still total correctly).
+    def pivot(rows, summary: false)
       priced = rows.select { |row| Pricing.known?(row.model) }
+      priced = priced.map { |row| collapse_row(row) } if summary
       models = priced.map(&:model).uniq.sort_by { |model| Pricing.sort_key(model) }
       cells = Hash.new { |hash, key| hash[key] = {} }
-      priced.each { |row| cells[[ row.date, row.project ]][row.model] = row }
+      priced.each do |row|
+        by_model = cells[[ row.date, row.project ]]
+        existing = by_model[row.model]
+        by_model[row.model] = existing ? merge_rows(existing, row) : row
+      end
       [ models, cells.keys.sort, cells ]
+    end
+
+    # Replaces a row's model with its family name (the leading segment of the
+    # normalized id), leaving usage and cost untouched.
+    def collapse_row(row)
+      Aggregator::Row.new(
+        project: row.project,
+        date: row.date,
+        model: Pricing.normalize_model(row.model).split("-").first,
+        usage: row.usage,
+        cost: row.cost,
+      )
+    end
+
+    def merge_rows(into, row)
+      Aggregator::Row.new(
+        project: into.project,
+        date: into.date,
+        model: into.model,
+        usage: into.usage + row.usage,
+        cost: into.cost + row.cost,
+      )
     end
 
     # Aligned table with a two-line header: each model name spans its pair of
@@ -46,8 +78,8 @@ module Clauditor
       # Token counts are abbreviated with scale suffixes (k/m/b) unless
       # verbose; costs are always shown in full. A trailing "Total" group sums
       # tokens and cost across every model for the (day, project) row.
-      def render(rows, verbose: false, hide_project: false)
-        models, keys, cells = Crosstab.pivot(rows)
+      def render(rows, verbose: false, hide_project: false, summary: false)
+        models, keys, cells = Crosstab.pivot(rows, summary: summary)
         groups = models + [ TOTAL_GROUP ]
 
         labels = hide_project ? LABELS.take(1) : LABELS
@@ -146,11 +178,12 @@ module Clauditor
 
       # verbose and hide_project are accepted for a uniform interface but
       # ignored — CSV always carries full-precision numbers and the project
-      # column.
-      def render(rows, verbose: false, hide_project: false)
+      # column. summary still applies: it changes which model columns exist,
+      # not their precision.
+      def render(rows, verbose: false, hide_project: false, summary: false)
         _ = verbose
         _ = hide_project
-        models, keys, cells = Crosstab.pivot(rows)
+        models, keys, cells = Crosstab.pivot(rows, summary: summary)
 
         CSV.generate do |csv|
           csv << ([ "date", "project" ] + models.flat_map { |model| METRICS.map { |metric| "#{model} #{metric}" } })

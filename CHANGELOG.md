@@ -2,8 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
@@ -14,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--root` is now repeatable, so a single report can span several transcript trees. Overlapping/nested roots are de-duplicated.
 - Optional YAML config at `~/.clauditor_config` supplying defaults for every option. Command-line flags override the config file.
 - Add support for Sonnet 5 pricing, including handling of the early discount period.
+- Add `--summary` option for `--anthropic` mode, to collapse different versions of the same model class together.  E.G. `opus-4.6`, `opus-4.7` => `opus`.
 
 ### Changed
 
@@ -30,5 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Persistent dataset under `~/.clauditor` so history survives Claude Code's transcript retention window.
 - `--version` option.
 
-[Unreleased]: https://github.com/MrJoy/clauditor/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/MrJoy/clauditor/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/MrJoy/clauditor/releases/tag/v0.0.2
 [0.0.1]: https://github.com/MrJoy/clauditor/releases/tag/v0.0.1

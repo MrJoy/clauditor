@@ -29,6 +29,7 @@ module Clauditor
         format: csv
         utc: true
         anthropic: true
+        summary: true
         verbose: true
         project: clauditor
         remap:
@@ -42,6 +43,7 @@ module Clauditor
         assert_equal "csv", options[:format]
         assert_equal :utc, options[:timezone]
         assert_equal true, options[:anthropic]
+        assert_equal true, options[:summary]
         assert_equal true, options[:verbose]
         assert_equal "clauditor", options[:project]
         assert_equal({ "/private/tmp/gone" => File.expand_path("~/real") }, options[:remap])

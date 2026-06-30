@@ -39,6 +39,8 @@ module Clauditor
           options[:timezone] = boolean(value, "utc", path) ? :utc : :local
         when "anthropic"
           options[:anthropic] = boolean(value, "anthropic", path)
+        when "summary"
+          options[:summary] = boolean(value, "summary", path)
         when "verbose"
           options[:verbose] = boolean(value, "verbose", path)
         when "project"

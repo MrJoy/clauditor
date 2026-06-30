@@ -44,7 +44,12 @@ module Clauditor
       hide_project = !options[:project].nil? && rows.map(&:project).uniq.size == 1
 
       if options[:anthropic]
-        out.print Crosstab.for(options[:format]).render(rows, verbose: options[:verbose], hide_project: hide_project)
+        out.print Crosstab.for(options[:format]).render(
+          rows,
+          verbose: options[:verbose],
+          hide_project: hide_project,
+          summary: options[:summary],
+        )
       else
         out.print Formatters.for(options[:format]).render(rows, hide_project: hide_project)
       end
@@ -75,6 +80,7 @@ module Clauditor
         timezone: :local,
         roots: [ SessionLoader::DEFAULT_ROOT ],
         anthropic: false,
+        summary: false,
         verbose: false,
         project: nil,
         remap: {},
@@ -99,6 +105,10 @@ module Clauditor
 
         opts.on("--anthropic", "Crosstab Anthropic models across columns (table, csv; not json)") do
           options[:anthropic] = true
+        end
+
+        opts.on("--summary", "With --anthropic, merge model versions into one column per family (opus-4-8 -> opus)") do
+          options[:summary] = true
         end
 
         opts.on("--verbose", "Show full token counts (the table crosstab abbreviates them by default)") do
