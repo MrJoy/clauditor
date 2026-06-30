@@ -100,7 +100,7 @@ module Clauditor
           date: date,
           model: model,
           usage: usage,
-          cost: Pricing.cost_for(model, usage),
+          cost: Pricing.cost_for(model, usage, date),
         )
       end.sort_by { |row| [ row.date, row.project, row.model ] }
     end

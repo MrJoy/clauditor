@@ -68,5 +68,37 @@ module Clauditor
 
       assert_nil Pricing.cost_for("qwen3.6:27b-coding-nvfp4", usage)
     end
+
+    def test_cost_for_applies_sonnet_5_introductory_rates_through_august
+      usage = Usage.new(input: 1_000_000, output: 1_000_000)
+
+      expected = 2.0 + 10.0 # $2/$10 per MTok through 2026-08-31
+
+      assert_in_delta expected, Pricing.cost_for("claude-sonnet-5", usage, "2026-08-31"), 1e-9
+      assert_in_delta expected, Pricing.cost_for("claude-sonnet-5", usage, "2026-06-30"), 1e-9
+    end
+
+    def test_cost_for_applies_sonnet_5_standard_rates_from_september
+      usage = Usage.new(input: 1_000_000, output: 1_000_000)
+
+      expected = 3.0 + 15.0 # $3/$15 per MTok from 2026-09-01
+
+      assert_in_delta expected, Pricing.cost_for("claude-sonnet-5", usage, "2026-09-01"), 1e-9
+      assert_in_delta expected, Pricing.cost_for("claude-sonnet-5", usage, "2027-01-15"), 1e-9
+    end
+
+    def test_cost_for_sonnet_5_defaults_to_current_tier_without_date
+      usage = Usage.new(input: 1_000_000, output: 1_000_000)
+
+      standard = 3.0 + 15.0 # open-ended tier when the day can't be placed in time
+
+      assert_in_delta standard, Pricing.cost_for("claude-sonnet-5", usage), 1e-9
+      assert_in_delta standard, Pricing.cost_for("claude-sonnet-5", usage, "unknown"), 1e-9
+    end
+
+    def test_known_and_sort_key_handle_sonnet_5
+      assert Pricing.known?("claude-sonnet-5")
+      assert_equal [ 1, "sonnet", [ 5 ] ], Pricing.sort_key("claude-sonnet-5")
+    end
   end
 end

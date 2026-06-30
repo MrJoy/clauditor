@@ -6,6 +6,12 @@ module Clauditor
   #
   # Rates track Anthropic's published list pricing. Cache reads bill at 0.1x
   # the base input rate; 5-minute cache writes at 1.25x; 1-hour writes at 2x.
+  #
+  # A model's value is normally a flat `{ input:, output: }` rate hash. When a
+  # model's list price changes on a known date, its value is instead an array
+  # of tiers ordered oldest-first, each a rate hash plus an `until:` cutoff
+  # ("YYYY-MM-DD", inclusive); the final tier carries no `until:` and applies
+  # indefinitely. .rates_for resolves a tier from a cell's day.
   module Pricing
     # Base input/output rates in USD per million tokens, keyed by the
     # normalized model id (see .normalize_model — no "claude-" prefix, no date).
@@ -15,6 +21,10 @@ module Clauditor
       "opus-4-7" => { input: 5.0, output: 25.0 },
       "opus-4-6" => { input: 5.0, output: 25.0 },
       "opus-4-5" => { input: 5.0, output: 25.0 },
+      "sonnet-5" => [
+        { until: "2026-08-31", input: 2.0, output: 10.0 },
+        { input: 3.0, output: 15.0 },
+      ],
       "sonnet-4-6" => { input: 3.0, output: 15.0 },
       "sonnet-4-5" => { input: 3.0, output: 15.0 },
       "haiku-4-5" => { input: 1.0, output: 5.0 },
@@ -55,14 +65,28 @@ module Clauditor
       [ FAMILY_ORDER.index(family) || FAMILY_ORDER.size, family, version.map(&:to_i) ]
     end
 
-    def rates_for(model)
-      RATES[normalize_model(model)]
+    # Resolves the rate hash for a model on a given day. Date-independent
+    # models return their flat hash regardless of `date`. Tiered models select
+    # the first tier whose inclusive `until:` cutoff is on or after the day (the
+    # open-ended final tier always matches). When the day is nil or "unknown"
+    # — it can't be placed in time — the current, open-ended tier applies.
+    def rates_for(model, date = nil)
+      entry = RATES[normalize_model(model)]
+      return entry unless entry.is_a?(Array)
+
+      if date && date != "unknown"
+        entry.find { |tier| tier[:until].nil? || date <= tier[:until] }
+      else
+        entry.last
+      end
     end
 
-    # USD cost for a Usage under the given model, or nil when we have no rates
-    # for that model (e.g. local or synthetic models).
-    def cost_for(model, usage)
-      rates = rates_for(model)
+    # USD cost for a Usage under the given model on the given day, or nil when
+    # we have no rates for that model (e.g. local or synthetic models). The day
+    # ("YYYY-MM-DD") selects the active rate tier for models whose list price
+    # changes over time.
+    def cost_for(model, usage, date = nil)
+      rates = rates_for(model, date)
       return nil unless rates
 
       input_rate = rates[:input]
