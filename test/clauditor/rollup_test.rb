@@ -104,5 +104,59 @@ module Clauditor
       assert_includes total, "—"
       refute_includes total, "$0.00"
     end
+
+    def test_csv_has_project_model_and_no_date_column
+      rows = [
+        row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 100, cost: 1.5),
+        row(project: "/Users/me/a", date: "2026-06-08", model: "opus-4-8", input: 50, cost: 0.9),
+      ]
+
+      table = CSV.parse(Rollup::Csv.render(rows), headers: true)
+
+      assert_equal %w[project model input_tokens output_tokens cache_creation_tokens cache_read_tokens total_tokens cost_usd], table.headers
+      refute_includes table.headers, "date"
+      assert_equal 1, table.size
+      assert_equal "150", table.first["input_tokens"]
+      assert_equal "2.4000", table.first["cost_usd"]
+    end
+
+    def test_csv_blanks_cost_for_unpriced_model
+      rows = [ row(project: "/Users/me/a", date: "2026-06-07", model: "qwen", input: 5, cost: nil) ]
+
+      table = CSV.parse(Rollup::Csv.render(rows), headers: true)
+
+      assert_nil table.first["cost_usd"]
+    end
+
+    def test_json_collapses_to_per_project_model
+      rows = [
+        row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 100, cost: 1.5),
+        row(project: "/Users/me/a", date: "2026-06-08", model: "opus-4-8", input: 50, cost: 0.9),
+      ]
+
+      payload = JSON.parse(Rollup::Json.render(rows))
+
+      assert_equal 1, payload.size
+      refute payload.first.key?("date")
+      assert_equal 150, payload.first["input_tokens"]
+      assert_in_delta 2.4, payload.first["cost_usd"], 1e-9
+      assert_equal true, payload.first["priced"]
+    end
+
+    def test_json_marks_unpriced_model
+      rows = [ row(project: "/Users/me/a", date: "2026-06-07", model: "qwen", input: 5, cost: nil) ]
+
+      payload = JSON.parse(Rollup::Json.render(rows))
+
+      assert_nil payload.first["cost_usd"]
+      assert_equal false, payload.first["priced"]
+    end
+
+    def test_for_dispatches_by_format_name
+      assert_equal Rollup::Table, Rollup.for("table")
+      assert_equal Rollup::Csv, Rollup.for("csv")
+      assert_equal Rollup::Json, Rollup.for("json")
+      assert_raises(ArgumentError) { Rollup.for("xml") }
+    end
   end
 end

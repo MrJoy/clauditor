@@ -15,6 +15,8 @@ module Clauditor
     def for(name)
       case name.to_s
       when "table" then Table
+      when "csv" then Csv
+      when "json" then Json
       else
         raise ArgumentError, "unknown format: #{name}"
       end
@@ -97,6 +99,64 @@ module Clauditor
           Formatters.delimit(usage.cache_read),
           Formatters.cost_cell(cost),
         ]
+      end
+    end
+
+    # Machine-readable rows; cost left blank for unpriced models.
+    module Csv
+      module_function
+
+      # hide_project is accepted for a uniform interface but ignored.
+      def render(rows, hide_project: false)
+        _ = hide_project
+        CSV.generate do |csv|
+          csv << [
+            "project",
+            "model",
+            "input_tokens",
+            "output_tokens",
+            "cache_creation_tokens",
+            "cache_read_tokens",
+            "total_tokens",
+            "cost_usd",
+          ]
+          Rollup.collapse(rows).each do |row|
+            csv << [
+              ProjectNormalizer.display(row.project),
+              row.model,
+              row.usage.input,
+              row.usage.output,
+              row.usage.cache_write,
+              row.usage.cache_read,
+              row.usage.total,
+              row.cost.nil? ? nil : format("%.4f", row.cost),
+            ]
+          end
+        end
+      end
+    end
+
+    # Pretty JSON array; cost_usd is null and priced=false for unknown models.
+    module Json
+      module_function
+
+      # hide_project is accepted for a uniform interface but ignored.
+      def render(rows, hide_project: false)
+        _ = hide_project
+        payload = Rollup.collapse(rows).map do |row|
+          {
+            project: ProjectNormalizer.display(row.project),
+            model: row.model,
+            input_tokens: row.usage.input,
+            output_tokens: row.usage.output,
+            cache_creation_tokens: row.usage.cache_write,
+            cache_read_tokens: row.usage.cache_read,
+            total_tokens: row.usage.total,
+            cost_usd: row.cost.nil? ? nil : row.cost.round(4),
+            priced: row.priced?,
+          }
+        end
+        "#{JSON.pretty_generate(payload)}\n"
       end
     end
   end
