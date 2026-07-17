@@ -35,6 +35,29 @@ module Clauditor
       "#{delimit(whole)}.#{fraction}"
     end
 
+    # Renders a cost figure, or an em-dash when the cost is unknown (nil).
+    def cost_cell(cost)
+      cost.nil? ? "—" : "$#{delimit_decimal(cost)}"
+    end
+
+    # Column widths: the max length across the header cell and every body cell.
+    def column_widths(headers, table)
+      headers.each_index.map do |col|
+        ([ headers[col].length ] + table.map { |cols| cols[col].length }).max
+      end
+    end
+
+    # Left-align the leading label columns, right-align the numeric ones.
+    def format_row(cols, widths, label_cols)
+      cols.each_with_index.map do |value, col|
+        col < label_cols ? value.ljust(widths[col]) : value.rjust(widths[col])
+      end.join("  ").rstrip
+    end
+
+    def separator(widths)
+      widths.map { |w| "-" * w }.join("  ")
+    end
+
     def for(name)
       case name.to_s
       when "table" then Table
@@ -59,13 +82,13 @@ module Clauditor
         table << totals_row(rows, hide_project)
         label_cols = hide_project ? 2 : 3
 
-        widths = column_widths(headers, table)
+        widths = Formatters.column_widths(headers, table)
         lines = []
-        lines << format_row(headers, widths, label_cols)
-        lines << separator(widths)
+        lines << Formatters.format_row(headers, widths, label_cols)
+        lines << Formatters.separator(widths)
         table.each_with_index do |cols, index|
-          lines << separator(widths) if index == table.size - 1
-          lines << format_row(cols, widths, label_cols)
+          lines << Formatters.separator(widths) if index == table.size - 1
+          lines << Formatters.format_row(cols, widths, label_cols)
         end
         "#{lines.join("\n")}\n"
       end
@@ -77,7 +100,7 @@ module Clauditor
           Formatters.delimit(row.usage.output),
           Formatters.delimit(row.usage.cache_write),
           Formatters.delimit(row.usage.cache_read),
-          cost_cell(row.cost),
+          Formatters.cost_cell(row.cost),
         ]
       end
 
@@ -92,31 +115,8 @@ module Clauditor
           Formatters.delimit(usage.output),
           Formatters.delimit(usage.cache_write),
           Formatters.delimit(usage.cache_read),
-          cost_cell(priced),
+          Formatters.cost_cell(priced),
         ]
-      end
-
-      def cost_cell(cost)
-        cost.nil? ? "—" : "$#{Formatters.delimit_decimal(cost)}"
-      end
-
-      def column_widths(headers, table)
-        headers.each_index.map do |col|
-          ([ headers[col].length ] + table.map { |cols| cols[col].length }).max
-        end
-      end
-
-      # The leading label columns (Project, Date, Model) are left-aligned;
-      # numeric columns right-aligned. label_cols drops to 2 when Project is
-      # hidden.
-      def format_row(cols, widths, label_cols)
-        cols.each_with_index.map do |value, col|
-          col < label_cols ? value.ljust(widths[col]) : value.rjust(widths[col])
-        end.join("  ").rstrip
-      end
-
-      def separator(widths)
-        widths.map { |w| "-" * w }.join("  ")
       end
     end
 

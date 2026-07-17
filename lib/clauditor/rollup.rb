@@ -63,13 +63,13 @@ module Clauditor
         table << totals_row(cells, hide_project)
         label_cols = hide_project ? 1 : 2
 
-        widths = column_widths(headers, table)
+        widths = Formatters.column_widths(headers, table)
         lines = []
-        lines << format_row(headers, widths, label_cols)
-        lines << separator(widths)
+        lines << Formatters.format_row(headers, widths, label_cols)
+        lines << Formatters.separator(widths)
         table.each_with_index do |cols, index|
-          lines << separator(widths) if index == table.size - 1
-          lines << format_row(cols, widths, label_cols)
+          lines << Formatters.separator(widths) if index == table.size - 1
+          lines << Formatters.format_row(cols, widths, label_cols)
         end
         "#{lines.join("\n")}\n"
       end
@@ -81,41 +81,22 @@ module Clauditor
           Formatters.delimit(row.usage.output),
           Formatters.delimit(row.usage.cache_write),
           Formatters.delimit(row.usage.cache_read),
-          cost_cell(row.cost),
+          Formatters.cost_cell(row.cost),
         ]
       end
 
       def totals_row(cells, hide_project)
         usage = cells.map(&:usage).reduce(Usage.new, :+)
-        priced = cells.select(&:priced?).sum(&:cost)
+        priced_cells = cells.select(&:priced?)
+        cost = priced_cells.empty? ? nil : priced_cells.sum(&:cost)
         labels = hide_project ? [ "TOTAL" ] : [ "TOTAL", "" ]
         labels + [
           Formatters.delimit(usage.input),
           Formatters.delimit(usage.output),
           Formatters.delimit(usage.cache_write),
           Formatters.delimit(usage.cache_read),
-          cost_cell(priced),
+          Formatters.cost_cell(cost),
         ]
-      end
-
-      def cost_cell(cost)
-        cost.nil? ? "—" : "$#{Formatters.delimit_decimal(cost)}"
-      end
-
-      def column_widths(headers, table)
-        headers.each_index.map do |col|
-          ([ headers[col].length ] + table.map { |cols| cols[col].length }).max
-        end
-      end
-
-      def format_row(cols, widths, label_cols)
-        cols.each_with_index.map do |value, col|
-          col < label_cols ? value.ljust(widths[col]) : value.rjust(widths[col])
-        end.join("  ").rstrip
-      end
-
-      def separator(widths)
-        widths.map { |w| "-" * w }.join("  ")
       end
     end
   end

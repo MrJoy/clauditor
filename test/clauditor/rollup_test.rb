@@ -92,5 +92,17 @@ module Clauditor
 
       assert_includes data, "—"
     end
+
+    def test_table_total_renders_dash_when_all_rows_unpriced
+      rows = [
+        row(project: "/Users/me/a", date: "2026-06-07", model: "qwen", input: 5, cost: nil),
+        row(project: "/Users/me/a", date: "2026-06-08", model: "qwen", input: 7, cost: nil),
+      ]
+
+      total = Rollup::Table.render(rows).lines.find { |l| l.start_with?("TOTAL") }
+
+      assert_includes total, "—"
+      refute_includes total, "$0.00"
+    end
   end
 end
