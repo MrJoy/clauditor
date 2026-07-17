@@ -41,6 +41,12 @@ module Clauditor
           options[:anthropic] = boolean(value, "anthropic", path)
         when "summary"
           options[:summary] = boolean(value, "summary", path)
+        when "rollup"
+          options[:rollup] = boolean(value, "rollup", path)
+        when "days"
+          options[:days] = integer(value, "days", path)
+        when "since"
+          options[:since] = value.to_s
         when "verbose"
           options[:verbose] = boolean(value, "verbose", path)
         when "project"
@@ -95,6 +101,12 @@ module Clauditor
       return value if value == true || value == false
 
       raise ArgumentError, "#{path}: '#{key}' must be true or false"
+    end
+
+    def self.integer(value, key, path)
+      return value if value.is_a?(Integer)
+
+      raise ArgumentError, "#{path}: '#{key}' must be an integer"
     end
   end
 end

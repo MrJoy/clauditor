@@ -396,6 +396,15 @@ module Clauditor
       end
     end
 
+    def test_config_days_without_rollup_errors
+      with_config("days: 7\n") do |config_path|
+        status, _out, err = run_cli([], config_path: config_path)
+
+        assert_equal 1, status
+        assert_includes err, "--days requires --rollup"
+      end
+    end
+
     def with_config(body)
       Dir.mktmpdir do |dir|
         path = File.join(dir, "clauditor_config")

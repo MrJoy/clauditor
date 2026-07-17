@@ -131,5 +131,29 @@ module Clauditor
         assert_includes error.message, "invalid YAML"
       end
     end
+
+    def test_translates_rollup_days_since
+      with_config("rollup: true\ndays: 5\nsince: \"2026-06-01\"\n") do |path|
+        options = Config.load(path: path)
+
+        assert_equal true, options[:rollup]
+        assert_equal 5, options[:days]
+        assert_equal "2026-06-01", options[:since]
+      end
+    end
+
+    def test_rollup_must_be_boolean
+      with_config("rollup: sometimes\n") do |path|
+        error = assert_raises(ArgumentError) { Config.load(path: path) }
+        assert_includes error.message, "true or false"
+      end
+    end
+
+    def test_days_must_be_integer
+      with_config("days: soon\n") do |path|
+        error = assert_raises(ArgumentError) { Config.load(path: path) }
+        assert_includes error.message, "must be an integer"
+      end
+    end
   end
 end
