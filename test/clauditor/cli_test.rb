@@ -279,6 +279,123 @@ module Clauditor
       end
     end
 
+    def test_rollup_table_collapses_dates
+      Dir.mktmpdir do |root|
+        File.write(File.join(root, "s.jsonl"), <<~JSONL)
+          {"type":"assistant","cwd":"/Users/me/proj","timestamp":"2026-06-07T12:00:00.000Z","message":{"id":"m1","model":"claude-opus-4-8","usage":{"input_tokens":100,"output_tokens":10}}}
+          {"type":"assistant","cwd":"/Users/me/proj","timestamp":"2026-06-08T12:00:00.000Z","message":{"id":"m2","model":"claude-opus-4-8","usage":{"input_tokens":50,"output_tokens":5}}}
+        JSONL
+        status, out, = run_cli([ "--root", root, "--utc", "--rollup" ])
+
+        assert_equal 0, status
+        assert_includes out, "Model"
+        refute_includes out, "Date"
+        assert_includes out, "150"
+        data = out.lines.select { |l| l.include?("opus-4-8") }
+        assert_equal 1, data.size
+      end
+    end
+
+    def test_rollup_json_collapses_dates
+      Dir.mktmpdir do |root|
+        File.write(File.join(root, "s.jsonl"), <<~JSONL)
+          {"type":"assistant","cwd":"/Users/me/proj","timestamp":"2026-06-07T12:00:00.000Z","message":{"id":"m1","model":"claude-opus-4-8","usage":{"input_tokens":100,"output_tokens":10}}}
+          {"type":"assistant","cwd":"/Users/me/proj","timestamp":"2026-06-08T12:00:00.000Z","message":{"id":"m2","model":"claude-opus-4-8","usage":{"input_tokens":50,"output_tokens":5}}}
+        JSONL
+        status, out, = run_cli([ "--root", root, "--utc", "--rollup", "--format", "json" ])
+        payload = JSON.parse(out)
+
+        assert_equal 0, status
+        assert_equal 1, payload.size
+        assert_equal 150, payload.first["input_tokens"]
+        refute payload.first.key?("date")
+      end
+    end
+
+    def test_rollup_days_window_excludes_older_rows
+      Dir.mktmpdir do |root|
+        recent = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        File.write(File.join(root, "s.jsonl"), <<~JSONL)
+          {"type":"assistant","cwd":"/Users/me/proj","timestamp":"2000-01-01T12:00:00.000Z","message":{"id":"old","model":"claude-opus-4-8","usage":{"input_tokens":999,"output_tokens":1}}}
+          {"type":"assistant","cwd":"/Users/me/proj","timestamp":"#{recent}","message":{"id":"new","model":"claude-opus-4-8","usage":{"input_tokens":42,"output_tokens":1}}}
+        JSONL
+        status, out, = run_cli([ "--root", root, "--utc", "--rollup", "--days", "1" ])
+
+        assert_equal 0, status
+        assert_includes out, "42"
+        refute_includes out, "999"
+      end
+    end
+
+    def test_rollup_since_window_excludes_older_rows
+      Dir.mktmpdir do |root|
+        File.write(File.join(root, "s.jsonl"), <<~JSONL)
+          {"type":"assistant","cwd":"/Users/me/proj","timestamp":"2026-06-01T12:00:00.000Z","message":{"id":"a","model":"claude-opus-4-8","usage":{"input_tokens":11,"output_tokens":1}}}
+          {"type":"assistant","cwd":"/Users/me/proj","timestamp":"2026-06-10T12:00:00.000Z","message":{"id":"b","model":"claude-opus-4-8","usage":{"input_tokens":22,"output_tokens":1}}}
+        JSONL
+        status, out, = run_cli([ "--root", root, "--utc", "--rollup", "--since", "2026-06-05" ])
+
+        assert_equal 0, status
+        assert_includes out, "22"
+        refute_includes out, "11"
+      end
+    end
+
+    def test_rollup_with_anthropic_errors
+      status, _out, err = run_cli([ "--rollup", "--anthropic" ])
+
+      assert_equal 1, status
+      assert_includes err, "--rollup and --anthropic cannot be combined"
+    end
+
+    def test_days_and_since_together_error
+      status, _out, err = run_cli([ "--rollup", "--days", "7", "--since", "2026-06-01" ])
+
+      assert_equal 1, status
+      assert_includes err, "--days and --since cannot be combined"
+    end
+
+    def test_days_without_rollup_errors
+      status, _out, err = run_cli([ "--days", "7" ])
+
+      assert_equal 1, status
+      assert_includes err, "--days requires --rollup"
+    end
+
+    def test_since_without_rollup_errors
+      status, _out, err = run_cli([ "--since", "2026-06-01" ])
+
+      assert_equal 1, status
+      assert_includes err, "--since requires --rollup"
+    end
+
+    def test_days_non_positive_errors
+      status, _out, err = run_cli([ "--rollup", "--days", "0" ])
+
+      assert_equal 1, status
+      assert_includes err, "--days must be a positive integer"
+    end
+
+    def test_invalid_since_date_errors
+      status, _out, err = run_cli([ "--rollup", "--since", "nope" ])
+
+      assert_equal 1, status
+      assert_includes err, "invalid --since date"
+    end
+
+    def test_rollup_single_project_hides_project_column
+      Dir.mktmpdir do |root|
+        File.write(File.join(root, "s.jsonl"), <<~JSONL)
+          {"type":"assistant","cwd":"/Users/me/proj","timestamp":"2026-06-07T12:00:00.000Z","message":{"id":"m1","model":"claude-opus-4-8","usage":{"input_tokens":100,"output_tokens":10}}}
+        JSONL
+        status, out, = run_cli([ "--root", root, "--utc", "--rollup", "--project", "proj" ])
+
+        assert_equal 0, status
+        refute_includes out, "Project"
+        assert out.lines.first.start_with?("Model"), "Model should lead when project hidden"
+      end
+    end
+
     def with_config(body)
       Dir.mktmpdir do |dir|
         path = File.join(dir, "clauditor_config")

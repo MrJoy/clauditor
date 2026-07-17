@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "optparse"
+require "date"
 
 module Clauditor
   # Command-line entry point: parses options, runs the aggregation, and prints
@@ -15,6 +16,8 @@ module Clauditor
     def run(argv, out: $stdout, err: $stderr, config_path: Config::DEFAULT_PATH)
       options = parse(argv, config_path: config_path)
       return 0 if options[:exit]
+
+      validate_rollup_options!(options)
 
       if options[:anthropic] && options[:format] == "json"
         err.puts "clauditor: --anthropic is not supported with --format json (use table or csv)"
@@ -37,13 +40,16 @@ module Clauditor
       store&.save(rows)
 
       rows = filter_projects(rows, options[:project])
+      rows = window_rows(rows, days: options[:days], since: options[:since], timezone: options[:timezone]) if options[:rollup]
 
       # When a --project filter has narrowed the output to a single project the
       # project column is redundant; drop it from the human-readable views
       # (CSV/JSON keep it, and ignore the flag).
       hide_project = !options[:project].nil? && rows.map(&:project).uniq.size == 1
 
-      if options[:anthropic]
+      if options[:rollup]
+        out.print Rollup.for(options[:format]).render(rows, hide_project: hide_project)
+      elsif options[:anthropic]
         out.print Crosstab.for(options[:format]).render(
           rows,
           verbose: options[:verbose],
@@ -73,6 +79,48 @@ module Clauditor
       end
     end
 
+    # --rollup-only flags: mutually exclusive with --anthropic and with each
+    # other, and inert without --rollup (so we reject them rather than let them
+    # silently do nothing).
+    def validate_rollup_options!(options)
+      raise ArgumentError, "--rollup and --anthropic cannot be combined" if options[:rollup] && options[:anthropic]
+      raise ArgumentError, "--days and --since cannot be combined" if options[:days] && options[:since]
+
+      unless options[:rollup]
+        raise ArgumentError, "--days requires --rollup" if options[:days]
+        raise ArgumentError, "--since requires --rollup" if options[:since]
+        return
+      end
+
+      raise ArgumentError, "--days must be a positive integer" if options[:days] && options[:days] < 1
+      validate_since!(options[:since]) if options[:since]
+    end
+
+    def validate_since!(value)
+      Date.strptime(value, "%Y-%m-%d")
+    rescue ArgumentError
+      raise ArgumentError, "invalid --since date '#{value}' (expected YYYY-MM-DD)"
+    end
+
+    # Keeps only rows within the window. Rows dated "unknown" can't be placed on
+    # the timeline, so they're dropped whenever a window is active. Date strings
+    # compare lexicographically the same as chronologically.
+    def window_rows(rows, days:, since:, timezone:)
+      cutoff = since || days_cutoff(days, timezone)
+      return rows if cutoff.nil?
+
+      rows.select { |row| row.date != "unknown" && row.date >= cutoff }
+    end
+
+    # The inclusive lower-bound day for --days N: N calendar days back including
+    # today, in the active timezone (matching how the aggregator buckets days).
+    def days_cutoff(days, timezone)
+      return nil if days.nil?
+
+      today = timezone == :utc ? Time.now.utc.to_date : Date.today
+      (today - (days - 1)).to_s
+    end
+
     def parse(argv, config_path: Config::DEFAULT_PATH)
       # Precedence: built-in defaults < config file < flags passed on the CLI.
       options = {
@@ -81,6 +129,9 @@ module Clauditor
         roots: [ SessionLoader::DEFAULT_ROOT ],
         anthropic: false,
         summary: false,
+        rollup: false,
+        days: nil,
+        since: nil,
         verbose: false,
         project: nil,
         remap: {},
@@ -109,6 +160,18 @@ module Clauditor
 
         opts.on("--summary", "With --anthropic, merge model versions into one column per family (opus-4-8 -> opus)") do
           options[:summary] = true
+        end
+
+        opts.on("--rollup", "Collapse dates: totals per (project, model) across the window") do
+          options[:rollup] = true
+        end
+
+        opts.on("--days N", Integer, "With --rollup: only the last N days, including today") do |n|
+          options[:days] = n
+        end
+
+        opts.on("--since DATE", "With --rollup: only rows dated on or after DATE (YYYY-MM-DD)") do |date|
+          options[:since] = date
         end
 
         opts.on("--verbose", "Show full token counts (the table crosstab abbreviates them by default)") do
