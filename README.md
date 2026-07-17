@@ -46,6 +46,9 @@ bundle exec bin/clauditor [options]
 | `--utc` | Bucket days by UTC instead of local time. |
 | `--anthropic` | Crosstab Anthropic models across columns. Supported with `table` and `csv`; **not** `json`. |
 | `--verbose` | Show full token counts. The table crosstab abbreviates counts with `k`/`m`/`b` suffixes by default; this disables that. (No effect on CSV, which is always full precision.) |
+| `--rollup` | Collapse the per-day breakdown into one row per `(project, model)`, summed across the window. Works with `table`, `csv`, and `json`. Cannot be combined with `--anthropic`. |
+| `--days N` | With `--rollup`: keep only the last `N` days, **including today**, in the active timezone. Rollup-only; error otherwise. Mutually exclusive with `--since`. |
+| `--since DATE` | With `--rollup`: keep only rows dated on or after `DATE` (`YYYY-MM-DD`). Rollup-only; error otherwise. Mutually exclusive with `--days`. |
 | `--project NAME` | Only include projects whose path (or its `~`-relative display) contains `NAME`, case-insensitively. |
 | `--root DIR` | Session transcripts directory (default: `~/.claude/projects`). **Repeatable** — pass `--root` multiple times to scan several trees in one report. Overlapping/nested roots are de-duplicated. |
 | `--no-store` | Neither read nor update the persistent dataset. Forces a full live scan. |
@@ -68,6 +71,17 @@ name spans its Tokens + Cost pair) and appends a trailing `Total` group summing 
 that row. The CSV view emits five columns per model (Input / Output / Cache Write / Cache Read /
 Cost).
 
+### The `--rollup` view
+
+`--rollup` collapses the date dimension: instead of a line per `(project, day, model)`, you get one
+line per `(project, model)` with usage and cost summed across the whole window, sorted by project
+then model. It works in `table`, `csv`, and `json`. Costs are summed from each day's already-priced
+figure, so a model whose list price changed mid-window still totals correctly.
+
+Restrict the window with `--days N` (the last `N` days including today) or `--since YYYY-MM-DD` (an
+absolute cutoff). Both are rollup-only and mutually exclusive. `--rollup` cannot be combined with
+`--anthropic`.
+
 ### Examples
 
 ```bash
@@ -88,6 +102,12 @@ bundle exec bin/clauditor --no-store --root /path/to/transcripts
 
 # Several transcript trees in a single report
 bundle exec bin/clauditor --root ~/.claude/projects --root /mnt/backup/claude-projects
+
+# All-time totals per project and model
+bundle exec bin/clauditor --rollup
+
+# Last 30 days, one project, as JSON
+bundle exec bin/clauditor --rollup --days 30 --project ~/mrjoy/clauditor --format json
 ```
 
 ## Config file
@@ -106,6 +126,9 @@ format: table                  # table | csv | json
 utc: false                     # true buckets days by UTC
 anthropic: false               # crosstab Anthropic models across columns
 verbose: false                 # full token counts in the table crosstab
+rollup: false                  # collapse dates to per-(project, model) totals
+days: 30                       # with rollup: only the last N days (mutually exclusive with since)
+since: 2026-01-01              # with rollup: only rows on/after this date (mutually exclusive with days)
 project: clauditor             # only projects whose path contains this substring
 remap:                         # fold stray project paths onto a canonical one
   /private/tmp/pr1887-rereview3: ~/Unity/Games/3DTDF2P
