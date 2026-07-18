@@ -236,7 +236,6 @@ Expected: FAIL — `unknown keyword: :hide_model`.
 Replace the `HEADERS` constant and the `render`/`columns`/`totals_row` methods inside `module Table` with:
 
 ```ruby
-LABEL_HEADERS = [ "Project", "Model" ].freeze
 NUMERIC_HEADERS = [ "Input", "Output", "Cache Write", "Cache Read", "Cost" ].freeze
 
 # Token counts are abbreviated with k/m/b suffixes unless verbose (costs are
@@ -248,7 +247,10 @@ def render(rows, verbose: false, hide_project: false, hide_model: false)
   cells = Rollup.collapse(rows)
   labels = label_headers(hide_project, hide_model)
   headers = labels + NUMERIC_HEADERS
-  drop_model = labels == [ "Project" ] ? false : hide_model
+  # Drop the Model cells exactly when there is no Model header — keeps header
+  # and cells in lockstep, including the both-hidden guard where label_headers
+  # forces "Model" back in.
+  drop_model = !labels.include?("Model")
   table = cells.map { |cell| columns(cell, verbose, hide_project, drop_model) }
   table << totals_row(cells, verbose, labels.size)
   label_cols = labels.size
@@ -306,7 +308,7 @@ def tokens(value, verbose)
 end
 ```
 
-Note: in `render`, `columns` receives `drop_model` (not the raw `hide_model`) so the both-hidden guard — which keeps the Model *header* — also keeps the Model *cell*; the header and the cells stay in lockstep.
+Note: in `render`, `columns` receives `drop_model = !labels.include?("Model")` (not the raw `hide_model`) so the both-hidden guard — which keeps the Model *header* — also keeps the Model *cell*; the header and the cells stay in lockstep.
 
 Update `module Csv` and `module Json` signatures to add `hide_model:` alongside the existing ignores:
 
