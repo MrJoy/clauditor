@@ -45,7 +45,7 @@ bundle exec bin/clauditor [options]
 | `-f`, `--format FORMAT` | Output format: `table`, `csv`, or `json` (default: `table`). |
 | `--utc` | Bucket days by UTC instead of local time. |
 | `--anthropic` | Crosstab Anthropic models across columns. Supported with `table` and `csv`; **not** `json`. |
-| `--verbose` | Show full token counts. The table crosstab abbreviates counts with `k`/`m`/`b` suffixes by default; this disables that. (No effect on CSV, which is always full precision.) |
+| `--verbose` | Show full token counts. The crosstab and rollup tables abbreviate counts with `k`/`m`/`b` suffixes by default; this disables that. (No effect on CSV/JSON, which are always full precision.) |
 | `--rollup` | Collapse the per-day breakdown into one row per `(project, model)`, summed across the window. Works with `table`, `csv`, and `json`. Cannot be combined with `--anthropic`. |
 | `--days N` | With `--rollup`: keep only the last `N` days, **including today**, in the active timezone. Rollup-only; error otherwise. Mutually exclusive with `--since`. |
 | `--since DATE` | With `--rollup`: keep only rows dated on or after `DATE` (`YYYY-MM-DD`). Rollup-only; error otherwise. Mutually exclusive with `--days`. |
@@ -81,6 +81,10 @@ figure, so a model whose list price changed mid-window still totals correctly.
 Restrict the window with `--days N` (the last `N` days including today) or `--since YYYY-MM-DD` (an
 absolute cutoff). Both are rollup-only and mutually exclusive. `--rollup` cannot be combined with
 `--anthropic`.
+
+Like the crosstab, the rollup **table** abbreviates token counts with `k`/`m`/`b` suffixes; pass
+`--verbose` for full counts (costs are always shown in full). CSV and JSON are unaffected — always
+full precision.
 
 ### Examples
 
@@ -125,7 +129,7 @@ roots:                         # one or more transcript trees (or `root:` for a 
 format: table                  # table | csv | json
 utc: false                     # true buckets days by UTC
 anthropic: false               # crosstab Anthropic models across columns
-verbose: false                 # full token counts in the table crosstab
+verbose: false                 # full token counts in the crosstab and rollup tables
 rollup: false                  # collapse dates to per-(project, model) totals
 days: 30                       # with rollup: only the last N days (mutually exclusive with since)
 since: "2026-01-01"            # with rollup: only rows on/after this date (mutually exclusive with days)

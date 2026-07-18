@@ -296,6 +296,22 @@ module Clauditor
       end
     end
 
+    def test_rollup_table_abbreviates_tokens_unless_verbose
+      Dir.mktmpdir do |root|
+        File.write(File.join(root, "s.jsonl"), <<~JSONL)
+          {"type":"assistant","cwd":"/Users/me/proj","timestamp":"2026-06-07T12:00:00.000Z","message":{"id":"m1","model":"claude-opus-4-8","usage":{"input_tokens":1999980,"output_tokens":10}}}
+        JSONL
+
+        _status, out, = run_cli([ "--root", root, "--utc", "--rollup" ])
+        assert_includes out, "2.0m"
+        refute_includes out, "1,999,980"
+
+        _status, vout, = run_cli([ "--root", root, "--utc", "--rollup", "--verbose" ])
+        assert_includes vout, "1,999,980"
+        refute_includes vout, "2.0m"
+      end
+    end
+
     def test_rollup_json_collapses_dates
       Dir.mktmpdir do |root|
         File.write(File.join(root, "s.jsonl"), <<~JSONL)

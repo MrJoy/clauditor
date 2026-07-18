@@ -158,5 +158,49 @@ module Clauditor
       assert_equal Rollup::Json, Rollup.for("json")
       assert_raises(ArgumentError) { Rollup.for("xml") }
     end
+
+    def test_table_abbreviates_tokens_by_default
+      rows = [ row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 1_999_980, cost: 9.0) ]
+
+      output = Rollup::Table.render(rows)
+
+      assert_includes output, "2.0m"          # 1,999,980 abbreviated
+      refute_includes output, "1,999,980"
+      assert_includes output, "$9.00"         # cost is never abbreviated
+    end
+
+    def test_table_verbose_shows_full_token_counts
+      rows = [ row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 1_999_980, cost: 9.0) ]
+
+      output = Rollup::Table.render(rows, verbose: true)
+
+      assert_includes output, "1,999,980"
+      refute_includes output, "2.0m"
+    end
+
+    def test_table_abbreviates_the_totals_row
+      rows = [
+        row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 1_000_000, cost: 1.0),
+        row(project: "/Users/me/a", date: "2026-06-08", model: "opus-4-8", input: 1_000_000, cost: 1.0),
+      ]
+
+      total = Rollup::Table.render(rows).lines.find { |l| l.start_with?("TOTAL") }
+
+      assert_includes total, "2.0m"           # 1,000,000 + 1,000,000 summed then abbreviated
+      refute_includes total, "2,000,000"
+    end
+
+    def test_csv_ignores_verbose
+      rows = [ row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 1_999_980, cost: 9.0) ]
+
+      assert_equal Rollup::Csv.render(rows), Rollup::Csv.render(rows, verbose: true)
+      assert_includes Rollup::Csv.render(rows, verbose: true), "1999980"
+    end
+
+    def test_json_ignores_verbose
+      rows = [ row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 1_999_980, cost: 9.0) ]
+
+      assert_equal Rollup::Json.render(rows), Rollup::Json.render(rows, verbose: true)
+    end
   end
 end

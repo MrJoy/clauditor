@@ -57,12 +57,14 @@ module Clauditor
         "Cost",
       ].freeze
 
-      # hide_project drops the leading Project column (single-project output).
-      def render(rows, hide_project: false)
+      # Token counts are abbreviated with k/m/b suffixes unless verbose (costs
+      # are always shown in full), matching the --anthropic crosstab. hide_project
+      # drops the leading Project column (single-project output).
+      def render(rows, verbose: false, hide_project: false)
         cells = Rollup.collapse(rows)
         headers = hide_project ? HEADERS.drop(1) : HEADERS
-        table = cells.map { |cell| columns(cell, hide_project) }
-        table << totals_row(cells, hide_project)
+        table = cells.map { |cell| columns(cell, verbose, hide_project) }
+        table << totals_row(cells, verbose, hide_project)
         label_cols = hide_project ? 1 : 2
 
         widths = Formatters.column_widths(headers, table)
@@ -76,29 +78,34 @@ module Clauditor
         "#{lines.join("\n")}\n"
       end
 
-      def columns(row, hide_project)
+      def columns(row, verbose, hide_project)
         labels = hide_project ? [ row.model ] : [ ProjectNormalizer.display(row.project), row.model ]
         labels + [
-          Formatters.delimit(row.usage.input),
-          Formatters.delimit(row.usage.output),
-          Formatters.delimit(row.usage.cache_write),
-          Formatters.delimit(row.usage.cache_read),
+          tokens(row.usage.input, verbose),
+          tokens(row.usage.output, verbose),
+          tokens(row.usage.cache_write, verbose),
+          tokens(row.usage.cache_read, verbose),
           Formatters.cost_cell(row.cost),
         ]
       end
 
-      def totals_row(cells, hide_project)
+      def totals_row(cells, verbose, hide_project)
         usage = cells.map(&:usage).reduce(Usage.new, :+)
         priced_cells = cells.select(&:priced?)
         cost = priced_cells.empty? ? nil : priced_cells.sum(&:cost)
         labels = hide_project ? [ "TOTAL" ] : [ "TOTAL", "" ]
         labels + [
-          Formatters.delimit(usage.input),
-          Formatters.delimit(usage.output),
-          Formatters.delimit(usage.cache_write),
-          Formatters.delimit(usage.cache_read),
+          tokens(usage.input, verbose),
+          tokens(usage.output, verbose),
+          tokens(usage.cache_write, verbose),
+          tokens(usage.cache_read, verbose),
           Formatters.cost_cell(cost),
         ]
+      end
+
+      # Full delimited count when verbose, otherwise a k/m/b-abbreviated one.
+      def tokens(value, verbose)
+        verbose ? Formatters.delimit(value) : Formatters.scale(value)
       end
     end
 
@@ -106,8 +113,10 @@ module Clauditor
     module Csv
       module_function
 
-      # hide_project is accepted for a uniform interface but ignored.
-      def render(rows, hide_project: false)
+      # verbose and hide_project are accepted for a uniform interface but
+      # ignored — CSV is always full precision and always carries the project.
+      def render(rows, verbose: false, hide_project: false)
+        _ = verbose
         _ = hide_project
         CSV.generate do |csv|
           csv << [
@@ -140,8 +149,10 @@ module Clauditor
     module Json
       module_function
 
-      # hide_project is accepted for a uniform interface but ignored.
-      def render(rows, hide_project: false)
+      # verbose and hide_project are accepted for a uniform interface but
+      # ignored — JSON is always full precision and always carries the project.
+      def render(rows, verbose: false, hide_project: false)
+        _ = verbose
         _ = hide_project
         payload = Rollup.collapse(rows).map do |row|
           {

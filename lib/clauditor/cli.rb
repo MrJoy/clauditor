@@ -48,7 +48,7 @@ module Clauditor
       hide_project = !options[:project].nil? && rows.map(&:project).uniq.size == 1
 
       if options[:rollup]
-        out.print Rollup.for(options[:format]).render(rows, hide_project: hide_project)
+        out.print Rollup.for(options[:format]).render(rows, verbose: options[:verbose], hide_project: hide_project)
       elsif options[:anthropic]
         out.print Crosstab.for(options[:format]).render(
           rows,
@@ -174,7 +174,7 @@ module Clauditor
           options[:since] = date
         end
 
-        opts.on("--verbose", "Show full token counts (the table crosstab abbreviates them by default)") do
+        opts.on("--verbose", "Show full token counts (the crosstab and rollup tables abbreviate them by default)") do
           options[:verbose] = true
         end
 
