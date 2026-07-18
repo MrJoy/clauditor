@@ -72,7 +72,6 @@ module Clauditor
     module Table
       module_function
 
-      LABEL_HEADERS = [ "Project", "Date", "Model" ].freeze
       NUMERIC_HEADERS = [ "Input", "Output", "Cache Write", "Cache Read", "Cost" ].freeze
 
       # When hide_project / hide_model are set the corresponding leading label

@@ -163,6 +163,7 @@ module Clauditor
 
         assert_equal 0, status
         assert_includes out, "100"
+        refute_includes out.lines.first, "Model"
       end
     end
 

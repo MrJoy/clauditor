@@ -77,7 +77,9 @@ module Clauditor
 
       # Token counts are abbreviated with scale suffixes (k/m/b) unless
       # verbose; costs are always shown in full. A trailing "Total" group sums
-      # tokens and cost across every model for the (day, project) row.
+      # tokens and cost across every model for the (day, project) row — dropped
+      # when hide_model is set, since a single surviving model makes it
+      # redundant with that model's own pair.
       def render(rows, verbose: false, hide_project: false, hide_model: false, summary: false)
         models, keys, cells = Crosstab.pivot(rows, summary: summary)
         # One surviving model makes the trailing Total group redundant with that
@@ -102,13 +104,13 @@ module Clauditor
 
       def data_row(key, models, cells, verbose, hide_project, show_total)
         row = hide_project ? [ key.first ] : [ key.first, ProjectNormalizer.display(key.last) ]
-        present = models.filter_map { |model| cells[key][model] }
         models.each do |model|
           cell = cells[key][model]
           row << (cell ? tokens(cell.usage.total, verbose) : "")
           row << (cell ? "$#{Formatters.delimit_decimal(cell.cost)}" : "")
         end
         if show_total
+          present = models.filter_map { |model| cells[key][model] }
           row << tokens(present.sum(0) { |cell| cell.usage.total }, verbose)
           row << "$#{Formatters.delimit_decimal(present.sum(0.0, &:cost))}"
         end
@@ -117,13 +119,13 @@ module Clauditor
 
       def totals_row(models, cells, verbose, hide_project, show_total)
         row = hide_project ? [ "TOTAL" ] : [ "TOTAL", "" ]
-        all = cells.values.flat_map(&:values)
         models.each do |model|
           present = cells.values.filter_map { |by_model| by_model[model] }
           row << tokens(present.sum(0) { |cell| cell.usage.total }, verbose)
           row << "$#{Formatters.delimit_decimal(present.sum(0.0, &:cost))}"
         end
         if show_total
+          all = cells.values.flat_map(&:values)
           row << tokens(all.sum(0) { |cell| cell.usage.total }, verbose)
           row << "$#{Formatters.delimit_decimal(all.sum(0.0, &:cost))}"
         end

@@ -83,10 +83,10 @@ module Clauditor
         headers.empty? ? [ "Model" ] : headers
       end
 
-      def columns(row, verbose, hide_project, hide_model)
+      def columns(row, verbose, hide_project, drop_model)
         labels = []
         labels << ProjectNormalizer.display(row.project) unless hide_project
-        labels << row.model unless hide_model
+        labels << row.model unless drop_model
         labels + [
           tokens(row.usage.input, verbose),
           tokens(row.usage.output, verbose),
