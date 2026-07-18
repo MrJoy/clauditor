@@ -77,15 +77,20 @@ module Clauditor
 
       # Token counts are abbreviated with scale suffixes (k/m/b) unless
       # verbose; costs are always shown in full. A trailing "Total" group sums
-      # tokens and cost across every model for the (day, project) row.
-      def render(rows, verbose: false, hide_project: false, summary: false)
+      # tokens and cost across every model for the (day, project) row — dropped
+      # when hide_model is set, since a single surviving model makes it
+      # redundant with that model's own pair.
+      def render(rows, verbose: false, hide_project: false, hide_model: false, summary: false)
         models, keys, cells = Crosstab.pivot(rows, summary: summary)
-        groups = models + [ TOTAL_GROUP ]
+        # One surviving model makes the trailing Total group redundant with that
+        # model's own pair, so drop it when the caller hid the model dimension.
+        show_total = !hide_model
+        groups = show_total ? models + [ TOTAL_GROUP ] : models
 
         labels = hide_project ? LABELS.take(1) : LABELS
         flat_headers = labels + groups.flat_map { SUBCOLUMNS }
-        data = keys.map { |key| data_row(key, models, cells, verbose, hide_project) }
-        total = totals_row(models, cells, verbose, hide_project)
+        data = keys.map { |key| data_row(key, models, cells, verbose, hide_project, show_total) }
+        total = totals_row(models, cells, verbose, hide_project, show_total)
 
         widths = widen_for_model_names(flat_widths(flat_headers, data + [ total ]), groups, labels.size)
         aligns = Array.new(labels.size, :left) + Array.new(groups.size * 2, :right)
@@ -97,29 +102,33 @@ module Clauditor
         "#{lines.join("\n")}\n"
       end
 
-      def data_row(key, models, cells, verbose, hide_project)
+      def data_row(key, models, cells, verbose, hide_project, show_total)
         row = hide_project ? [ key.first ] : [ key.first, ProjectNormalizer.display(key.last) ]
-        present = models.filter_map { |model| cells[key][model] }
         models.each do |model|
           cell = cells[key][model]
           row << (cell ? tokens(cell.usage.total, verbose) : "")
           row << (cell ? "$#{Formatters.delimit_decimal(cell.cost)}" : "")
         end
-        row << tokens(present.sum(0) { |cell| cell.usage.total }, verbose)
-        row << "$#{Formatters.delimit_decimal(present.sum(0.0, &:cost))}"
+        if show_total
+          present = models.filter_map { |model| cells[key][model] }
+          row << tokens(present.sum(0) { |cell| cell.usage.total }, verbose)
+          row << "$#{Formatters.delimit_decimal(present.sum(0.0, &:cost))}"
+        end
         row
       end
 
-      def totals_row(models, cells, verbose, hide_project)
+      def totals_row(models, cells, verbose, hide_project, show_total)
         row = hide_project ? [ "TOTAL" ] : [ "TOTAL", "" ]
-        all = cells.values.flat_map(&:values)
         models.each do |model|
           present = cells.values.filter_map { |by_model| by_model[model] }
           row << tokens(present.sum(0) { |cell| cell.usage.total }, verbose)
           row << "$#{Formatters.delimit_decimal(present.sum(0.0, &:cost))}"
         end
-        row << tokens(all.sum(0) { |cell| cell.usage.total }, verbose)
-        row << "$#{Formatters.delimit_decimal(all.sum(0.0, &:cost))}"
+        if show_total
+          all = cells.values.flat_map(&:values)
+          row << tokens(all.sum(0) { |cell| cell.usage.total }, verbose)
+          row << "$#{Formatters.delimit_decimal(all.sum(0.0, &:cost))}"
+        end
         row
       end
 
@@ -180,9 +189,10 @@ module Clauditor
       # ignored — CSV always carries full-precision numbers and the project
       # column. summary still applies: it changes which model columns exist,
       # not their precision.
-      def render(rows, verbose: false, hide_project: false, summary: false)
+      def render(rows, verbose: false, hide_project: false, hide_model: false, summary: false)
         _ = verbose
         _ = hide_project
+        _ = hide_model
         models, keys, cells = Crosstab.pivot(rows, summary: summary)
 
         CSV.generate do |csv|

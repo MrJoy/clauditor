@@ -47,25 +47,21 @@ module Clauditor
     module Table
       module_function
 
-      HEADERS = [
-        "Project",
-        "Model",
-        "Input",
-        "Output",
-        "Cache Write",
-        "Cache Read",
-        "Cost",
-      ].freeze
+      NUMERIC_HEADERS = [ "Input", "Output", "Cache Write", "Cache Read", "Cost" ].freeze
 
-      # Token counts are abbreviated with k/m/b suffixes unless verbose (costs
-      # are always shown in full), matching the --anthropic crosstab. hide_project
-      # drops the leading Project column (single-project output).
-      def render(rows, verbose: false, hide_project: false)
+      # Token counts are abbreviated with k/m/b suffixes unless verbose (costs are
+      # always shown in full), matching the --anthropic crosstab. hide_project /
+      # hide_model drop the corresponding leading label column. This view has no
+      # always-present label column, so if both would be dropped the Model label is
+      # kept — a per-model rollup with no row labels is meaningless.
+      def render(rows, verbose: false, hide_project: false, hide_model: false)
         cells = Rollup.collapse(rows)
-        headers = hide_project ? HEADERS.drop(1) : HEADERS
-        table = cells.map { |cell| columns(cell, verbose, hide_project) }
-        table << totals_row(cells, verbose, hide_project)
-        label_cols = hide_project ? 1 : 2
+        labels = label_headers(hide_project, hide_model)
+        headers = labels + NUMERIC_HEADERS
+        drop_model = !labels.include?("Model")
+        table = cells.map { |cell| columns(cell, verbose, hide_project, drop_model) }
+        table << totals_row(cells, verbose, labels.size)
+        label_cols = labels.size
 
         widths = Formatters.column_widths(headers, table)
         lines = []
@@ -78,8 +74,19 @@ module Clauditor
         "#{lines.join("\n")}\n"
       end
 
-      def columns(row, verbose, hide_project)
-        labels = hide_project ? [ row.model ] : [ ProjectNormalizer.display(row.project), row.model ]
+      # Project?, Model? — but never both dropped (Model is kept when dropping it
+      # would leave no label column).
+      def label_headers(hide_project, hide_model)
+        headers = []
+        headers << "Project" unless hide_project
+        headers << "Model" unless hide_model
+        headers.empty? ? [ "Model" ] : headers
+      end
+
+      def columns(row, verbose, hide_project, drop_model)
+        labels = []
+        labels << ProjectNormalizer.display(row.project) unless hide_project
+        labels << row.model unless drop_model
         labels + [
           tokens(row.usage.input, verbose),
           tokens(row.usage.output, verbose),
@@ -89,11 +96,11 @@ module Clauditor
         ]
       end
 
-      def totals_row(cells, verbose, hide_project)
+      def totals_row(cells, verbose, label_cols)
         usage = cells.map(&:usage).reduce(Usage.new, :+)
         priced_cells = cells.select(&:priced?)
         cost = priced_cells.empty? ? nil : priced_cells.sum(&:cost)
-        labels = hide_project ? [ "TOTAL" ] : [ "TOTAL", "" ]
+        labels = [ "TOTAL" ] + Array.new(label_cols - 1, "")
         labels + [
           tokens(usage.input, verbose),
           tokens(usage.output, verbose),
@@ -113,11 +120,12 @@ module Clauditor
     module Csv
       module_function
 
-      # verbose and hide_project are accepted for a uniform interface but
-      # ignored — CSV is always full precision and always carries the project.
-      def render(rows, verbose: false, hide_project: false)
+      # verbose, hide_project, and hide_model are accepted for a uniform interface but
+      # ignored — CSV is always full precision and always carries the project and model.
+      def render(rows, verbose: false, hide_project: false, hide_model: false)
         _ = verbose
         _ = hide_project
+        _ = hide_model
         CSV.generate do |csv|
           csv << [
             "project",
@@ -149,11 +157,12 @@ module Clauditor
     module Json
       module_function
 
-      # verbose and hide_project are accepted for a uniform interface but
-      # ignored — JSON is always full precision and always carries the project.
-      def render(rows, verbose: false, hide_project: false)
+      # verbose, hide_project, and hide_model are accepted for a uniform interface but
+      # ignored — JSON is always full precision and always carries the project and model.
+      def render(rows, verbose: false, hide_project: false, hide_model: false)
         _ = verbose
         _ = hide_project
+        _ = hide_model
         payload = Rollup.collapse(rows).map do |row|
           {
             project: ProjectNormalizer.display(row.project),

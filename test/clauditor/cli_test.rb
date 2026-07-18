@@ -147,6 +147,67 @@ module Clauditor
       end
     end
 
+    def test_model_filter_matches_prefix_and_elides_model_column
+      with_fixture_root do |root|
+        status, out, = run_cli([ "--root", root, "--utc", "--model", "opus" ])
+
+        assert_equal 0, status
+        assert_includes out, "100" # opus row survives
+        refute_includes out.lines.first, "Model" # single model → column elided
+      end
+    end
+
+    def test_model_filter_case_insensitive
+      with_fixture_root do |root|
+        status, out, = run_cli([ "--root", root, "--utc", "--model", "OPUS" ])
+
+        assert_equal 0, status
+        assert_includes out, "100"
+        refute_includes out.lines.first, "Model"
+      end
+    end
+
+    def test_model_filter_excludes_non_matching
+      with_fixture_root do |root|
+        _status, out, = run_cli([ "--root", root, "--utc", "--model", "haiku" ])
+
+        refute_includes out, "opus-4-8"
+      end
+    end
+
+    def test_model_filter_matching_multiple_models_keeps_column
+      with_fixture_root do |a|
+        Dir.mktmpdir do |b|
+          File.write(File.join(b, "s.jsonl"), <<~JSONL)
+            {"type":"assistant","cwd":"/Users/me/proj","timestamp":"2026-06-07T12:00:00.000Z","message":{"id":"b1","model":"claude-haiku-4-5","usage":{"input_tokens":50,"output_tokens":5}}}
+          JSONL
+
+          # No --model given: both opus and haiku are present, so the Model column
+          # stays.
+          status, out, = run_cli([ "--root", a, "--root", b, "--utc" ])
+
+          assert_equal 0, status
+          assert_includes out.lines.first, "Model"
+          assert_includes out, "opus-4-8"
+          assert_includes out, "haiku-4-5"
+        end
+      end
+    end
+
+    def test_model_filter_from_config_default
+      Dir.mktmpdir do |dir|
+        config = File.join(dir, "cfg.yml")
+        File.write(config, "model: opus\n")
+        with_fixture_root do |root|
+          status, out, = run_cli([ "--root", root, "--utc" ], config_path: config)
+
+          assert_equal 0, status
+          assert_includes out, "100"
+          refute_includes out.lines.first, "Model"
+        end
+      end
+    end
+
     def test_store_serves_persisted_days_after_transcripts_disappear
       with_fixture_root do |root|
         Dir.mktmpdir do |store_dir|

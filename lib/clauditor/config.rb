@@ -51,6 +51,8 @@ module Clauditor
           options[:verbose] = boolean(value, "verbose", path)
         when "project"
           options[:project] = value&.to_s
+        when "model"
+          options[:model] = value&.to_s
         when "remap"
           options[:remap] = remap(value, path)
         when "store"

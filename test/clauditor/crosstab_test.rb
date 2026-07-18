@@ -175,5 +175,38 @@ module Clauditor
       assert_equal "50", row_b["opus-4-8 Input"]
       assert_nil row_b["haiku-4-5 Input"]
     end
+
+    def test_table_drops_total_group_when_model_hidden
+      single = [
+        row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 100, cost: 1.5),
+      ]
+
+      with_total_output = Crosstab::Table.render(single)
+      without_total_output = Crosstab::Table.render(single, hide_model: true)
+
+      with_total = with_total_output.lines[0]
+      without_total = without_total_output.lines[0]
+
+      assert_includes with_total, "Total"
+      refute_includes without_total, "Total"
+      # The single model's own group is still present.
+      assert_includes without_total, "opus-4-8"
+
+      # The body/TOTAL row itself shed the redundant Cost column too: with the
+      # Total group present there are two "$" cells (model + Total), with it
+      # dropped there is only one (the model's own).
+      with_total_row = with_total_output.lines.last
+      without_total_row = without_total_output.lines.last
+
+      assert_equal 2, with_total_row.count("$")
+      assert_equal 1, without_total_row.count("$")
+    end
+
+    def test_csv_ignores_hide_model
+      single = [
+        row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 100, cost: 1.5),
+      ]
+      assert_equal Crosstab::Csv.render(single), Crosstab::Csv.render(single, hide_model: true)
+    end
   end
 end
