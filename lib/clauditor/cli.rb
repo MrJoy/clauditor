@@ -40,24 +40,27 @@ module Clauditor
       store&.save(rows)
 
       rows = filter_projects(rows, options[:project])
+      rows = filter_models(rows, options[:model])
       rows = window_rows(rows, days: options[:days], since: options[:since], timezone: options[:timezone]) if options[:rollup]
 
-      # When a --project filter has narrowed the output to a single project the
-      # project column is redundant; drop it from the human-readable views
-      # (CSV/JSON keep it, and ignore the flag).
+      # When a --project / --model filter has narrowed the output to a single
+      # project / model the corresponding column is redundant; drop it from the
+      # human-readable views (CSV/JSON keep it, and ignore the flags).
       hide_project = !options[:project].nil? && rows.map(&:project).uniq.size == 1
+      hide_model = !options[:model].nil? && rows.map(&:model).uniq.size == 1
 
       if options[:rollup]
-        out.print Rollup.for(options[:format]).render(rows, verbose: options[:verbose], hide_project: hide_project)
+        out.print Rollup.for(options[:format]).render(rows, verbose: options[:verbose], hide_project: hide_project, hide_model: hide_model)
       elsif options[:anthropic]
         out.print Crosstab.for(options[:format]).render(
           rows,
           verbose: options[:verbose],
           hide_project: hide_project,
+          hide_model: hide_model,
           summary: options[:summary],
         )
       else
-        out.print Formatters.for(options[:format]).render(rows, hide_project: hide_project)
+        out.print Formatters.for(options[:format]).render(rows, hide_project: hide_project, hide_model: hide_model)
       end
       0
     rescue OptionParser::ParseError, ArgumentError => e
@@ -77,6 +80,16 @@ module Clauditor
         row.project.downcase.include?(needle) ||
           ProjectNormalizer.display(row.project).downcase.include?(needle)
       end
+    end
+
+    # Keeps rows whose model id starts with the given term, case-insensitively.
+    # Prefix (not substring) — `--model opus` matches `opus-4-8`. row.model is the
+    # already-normalized/displayed id. Returns all rows when no term is set.
+    def filter_models(rows, term)
+      return rows if term.nil?
+
+      needle = term.downcase
+      rows.select { |row| row.model.downcase.start_with?(needle) }
     end
 
     # --rollup-only flags: mutually exclusive with --anthropic and with each
@@ -134,6 +147,7 @@ module Clauditor
         since: nil,
         verbose: false,
         project: nil,
+        model: nil,
         remap: {},
         store: true,
         store_dir: Store::DEFAULT_DIR,
@@ -180,6 +194,10 @@ module Clauditor
 
         opts.on("--project NAME", "Only include projects whose path contains NAME") do |name|
           options[:project] = name
+        end
+
+        opts.on("--model NAME", "Only include models whose id starts with NAME (prefix match)") do |name|
+          options[:model] = name
         end
 
         opts.on("--root DIR", "Session transcripts directory; repeatable (default: ~/.claude/projects)") do |dir|
