@@ -202,5 +202,42 @@ module Clauditor
 
       assert_equal Rollup::Json.render(rows), Rollup::Json.render(rows, verbose: true)
     end
+
+    def test_table_drops_model_column_when_hidden
+      rows = [
+        row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 100, cost: 1.5),
+        row(project: "/Users/me/b", date: "2026-06-07", model: "opus-4-8", input: 50, cost: 0.9),
+      ]
+
+      lines = Rollup::Table.render(rows, hide_model: true).lines
+
+      assert_includes lines[0], "Project"
+      refute_includes lines[0], "Model"
+      refute(lines.any? { |line| line.include?("opus-4-8") })
+      assert(lines.any? { |line| line.start_with?("TOTAL") })
+    end
+
+    def test_table_both_hidden_keeps_model_label
+      rows = [ row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 100, cost: 1.5) ]
+
+      lines = Rollup::Table.render(rows, hide_project: true, hide_model: true).lines
+
+      # No always-present label column exists here, so Model is kept rather than
+      # leaving the view with no row labels at all.
+      refute_includes lines[0], "Project"
+      assert lines[0].start_with?("Model"), "Model label should be kept, got: #{lines[0].inspect}"
+      assert(lines.any? { |line| line.include?("opus-4-8") })
+      assert(lines.any? { |line| line.start_with?("TOTAL") })
+    end
+
+    def test_csv_ignores_hide_model
+      rows = [ row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 100, cost: 1.5) ]
+      assert_equal Rollup::Csv.render(rows), Rollup::Csv.render(rows, hide_model: true)
+    end
+
+    def test_json_ignores_hide_model
+      rows = [ row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 100, cost: 1.5) ]
+      assert_equal Rollup::Json.render(rows), Rollup::Json.render(rows, hide_model: true)
+    end
   end
 end
