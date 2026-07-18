@@ -175,5 +175,26 @@ module Clauditor
       assert_equal "50", row_b["opus-4-8 Input"]
       assert_nil row_b["haiku-4-5 Input"]
     end
+
+    def test_table_drops_total_group_when_model_hidden
+      single = [
+        row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 100, cost: 1.5),
+      ]
+
+      with_total = Crosstab::Table.render(single).lines[0]
+      without_total = Crosstab::Table.render(single, hide_model: true).lines[0]
+
+      assert_includes with_total, "Total"
+      refute_includes without_total, "Total"
+      # The single model's own group is still present.
+      assert_includes without_total, "opus-4-8"
+    end
+
+    def test_csv_ignores_hide_model
+      single = [
+        row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 100, cost: 1.5),
+      ]
+      assert_equal Crosstab::Csv.render(single), Crosstab::Csv.render(single, hide_model: true)
+    end
   end
 end
