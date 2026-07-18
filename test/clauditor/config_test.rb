@@ -151,6 +151,12 @@ module Clauditor
       end
     end
 
+    def test_translates_model
+      with_config("model: opus") do |path|
+        assert_equal "opus", Config.load(path: path)[:model]
+      end
+    end
+
     def test_rollup_must_be_boolean
       with_config("rollup: sometimes\n") do |path|
         error = assert_raises(ArgumentError) { Config.load(path: path) }
