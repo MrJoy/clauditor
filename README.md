@@ -128,7 +128,7 @@ anthropic: false               # crosstab Anthropic models across columns
 verbose: false                 # full token counts in the table crosstab
 rollup: false                  # collapse dates to per-(project, model) totals
 days: 30                       # with rollup: only the last N days (mutually exclusive with since)
-since: "2026-01-01"              # with rollup: only rows on/after this date (mutually exclusive with days)
+since: "2026-01-01"            # with rollup: only rows on/after this date (mutually exclusive with days)
 project: clauditor             # only projects whose path contains this substring
 remap:                         # fold stray project paths onto a canonical one
   /private/tmp/pr1887-rereview3: ~/Unity/Games/3DTDF2P
