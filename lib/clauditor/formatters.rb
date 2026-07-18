@@ -72,15 +72,19 @@ module Clauditor
     module Table
       module_function
 
-      HEADERS = [ "Project", "Date", "Model", "Input", "Output", "Cache Write", "Cache Read", "Cost" ].freeze
+      LABEL_HEADERS = [ "Project", "Date", "Model" ].freeze
+      NUMERIC_HEADERS = [ "Input", "Output", "Cache Write", "Cache Read", "Cost" ].freeze
 
-      # When hide_project is set the leading Project column is dropped — used
-      # when the output has been filtered down to a single project.
-      def render(rows, hide_project: false)
-        headers = hide_project ? HEADERS.drop(1) : HEADERS
-        table = rows.map { |row| columns(row, hide_project) }
-        table << totals_row(rows, hide_project)
-        label_cols = hide_project ? 2 : 3
+      # When hide_project / hide_model are set the corresponding leading label
+      # column is dropped — used when the output has been filtered to a single
+      # project and/or a single model. Date always remains, so at least one label
+      # column survives for the TOTAL label.
+      def render(rows, hide_project: false, hide_model: false)
+        labels = label_headers(hide_project, hide_model)
+        headers = labels + NUMERIC_HEADERS
+        table = rows.map { |row| columns(row, hide_project, hide_model) }
+        table << totals_row(rows, labels.size)
+        label_cols = labels.size
 
         widths = Formatters.column_widths(headers, table)
         lines = []
@@ -93,8 +97,19 @@ module Clauditor
         "#{lines.join("\n")}\n"
       end
 
-      def columns(row, hide_project = false)
-        labels = hide_project ? [ row.date, row.model ] : [ ProjectNormalizer.display(row.project), row.date, row.model ]
+      def label_headers(hide_project, hide_model)
+        headers = []
+        headers << "Project" unless hide_project
+        headers << "Date"
+        headers << "Model" unless hide_model
+        headers
+      end
+
+      def columns(row, hide_project = false, hide_model = false)
+        labels = []
+        labels << ProjectNormalizer.display(row.project) unless hide_project
+        labels << row.date
+        labels << row.model unless hide_model
         labels + [
           Formatters.delimit(row.usage.input),
           Formatters.delimit(row.usage.output),
@@ -104,12 +119,11 @@ module Clauditor
         ]
       end
 
-      # "TOTAL" sits in the leading label column — the Project column normally,
-      # or the Date column once Project is hidden.
-      def totals_row(rows, hide_project = false)
+      # "TOTAL" sits in the first surviving label column; the rest are blank.
+      def totals_row(rows, label_cols)
         usage = rows.map(&:usage).reduce(Usage.new, :+)
         priced = rows.select(&:priced?).sum(&:cost)
-        labels = hide_project ? [ "TOTAL", "" ] : [ "TOTAL", "", "" ]
+        labels = [ "TOTAL" ] + Array.new(label_cols - 1, "")
         labels + [
           Formatters.delimit(usage.input),
           Formatters.delimit(usage.output),
@@ -126,8 +140,9 @@ module Clauditor
 
       # hide_project is accepted for a uniform interface but ignored — the
       # machine-readable formats always carry the project column.
-      def render(rows, hide_project: false)
+      def render(rows, hide_project: false, hide_model: false)
         _ = hide_project
+        _ = hide_model
         CSV.generate do |csv|
           csv << [
             "project", "date", "model",
@@ -158,8 +173,9 @@ module Clauditor
 
       # hide_project is accepted for a uniform interface but ignored — the
       # machine-readable formats always carry the project key.
-      def render(rows, hide_project: false)
+      def render(rows, hide_project: false, hide_model: false)
         _ = hide_project
+        _ = hide_model
         payload = rows.map do |row|
           {
             project: ProjectNormalizer.display(row.project),
