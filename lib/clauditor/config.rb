@@ -19,7 +19,7 @@ module Clauditor
       data =
         begin
           YAML.safe_load_file(path)
-        rescue Psych::SyntaxError => e
+        rescue Psych::Exception => e
           raise ArgumentError, "#{path}: invalid YAML (#{e.message})"
         end
       data ||= {} # an empty file parses to nil

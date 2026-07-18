@@ -132,6 +132,15 @@ module Clauditor
       end
     end
 
+    def test_disallowed_yaml_class_raises_argument_error
+      # An unquoted date parses to a Ruby Date, which safe_load disallows; it
+      # must surface as a friendly ArgumentError, not an unhandled crash.
+      with_config("since: 2026-01-01\n") do |path|
+        error = assert_raises(ArgumentError) { Config.load(path: path) }
+        assert_includes error.message, "invalid YAML"
+      end
+    end
+
     def test_translates_rollup_days_since
       with_config("rollup: true\ndays: 5\nsince: \"2026-06-01\"\n") do |path|
         options = Config.load(path: path)
