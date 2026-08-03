@@ -37,6 +37,7 @@ module Clauditor
     def test_pivot_orders_columns_by_family_then_version
       varied = [
         row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 1, cost: 0.1),
+        row(project: "/Users/me/a", date: "2026-06-07", model: "opus-5", input: 1, cost: 0.1),
         row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-7", input: 1, cost: 0.1),
         row(project: "/Users/me/a", date: "2026-06-07", model: "sonnet-4-6", input: 1, cost: 0.1),
         row(project: "/Users/me/a", date: "2026-06-07", model: "haiku-4-5", input: 1, cost: 0.1),
@@ -44,13 +45,15 @@ module Clauditor
 
       models, = Crosstab.pivot(varied)
 
-      assert_equal %w[haiku-4-5 sonnet-4-6 opus-4-7 opus-4-8], models
+      # opus-5 is a newer major than opus-4-8, so it sorts last within the family.
+      assert_equal %w[haiku-4-5 sonnet-4-6 opus-4-7 opus-4-8 opus-5], models
     end
 
     def test_pivot_summary_merges_each_family_into_one_column
       varied = [
         row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-7", input: 100, cost: 1.0),
         row(project: "/Users/me/a", date: "2026-06-07", model: "opus-4-8", input: 50, cost: 0.5),
+        row(project: "/Users/me/a", date: "2026-06-07", model: "opus-5", input: 25, cost: 0.25),
         row(project: "/Users/me/a", date: "2026-06-07", model: "sonnet-5", input: 10, cost: 0.1),
       ]
 
@@ -58,8 +61,8 @@ module Clauditor
 
       assert_equal %w[sonnet opus], models
       cell = cells[[ "2026-06-07", "/Users/me/a" ]]["opus"]
-      assert_equal 150, cell.usage.input # 100 + 50 across opus-4-7 and opus-4-8
-      assert_in_delta 1.5, cell.cost, 1e-9 # already-computed costs summed
+      assert_equal 175, cell.usage.input # 100 + 50 + 25 across opus-4-7, opus-4-8, opus-5
+      assert_in_delta 1.75, cell.cost, 1e-9 # already-computed costs summed
     end
 
     def test_table_summary_drops_version_from_headers

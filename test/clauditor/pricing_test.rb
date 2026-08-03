@@ -100,5 +100,21 @@ module Clauditor
       assert Pricing.known?("claude-sonnet-5")
       assert_equal [ 1, "sonnet", [ 5 ] ], Pricing.sort_key("claude-sonnet-5")
     end
+
+    def test_cost_for_applies_opus_5_rates
+      usage = Usage.new(input: 1_000_000, output: 1_000_000, cache_read: 1_000_000,
+        cache_write_5m: 1_000_000, cache_write_1h: 1_000_000)
+
+      expected = 5.0 + 25.0 + (5.0 * 0.1) + (5.0 * 1.25) + (5.0 * 2.0)
+
+      assert_in_delta expected, Pricing.cost_for("claude-opus-5", usage), 1e-9
+    end
+
+    def test_known_and_sort_key_place_opus_5_after_opus_4_8
+      assert Pricing.known?("claude-opus-5")
+      assert_equal [ 2, "opus", [ 5 ] ], Pricing.sort_key("claude-opus-5")
+      assert_equal %w[opus-4-7 opus-4-8 opus-5 fable-5],
+        %w[opus-5 fable-5 opus-4-8 opus-4-7].sort_by { |model| Pricing.sort_key(model) }
+    end
   end
 end
