@@ -7,7 +7,8 @@ module Clauditor
   # Rates track Anthropic's published list pricing. Cache reads bill at 0.1x
   # the base input rate; 5-minute cache writes at 1.25x; 1-hour writes at 2x.
   # A rate hash may carry an explicit `cache_read:` USD/MTok rate for models
-  # whose cache reads don't follow the 0.1x rule (fable-5-1 lists $0.25).
+  # whose cache reads don't follow the 0.1x rule (fable-5-1 lists $0.25,
+  # opus-5-5 lists $0.20).
   #
   # A model's value is normally a flat `{ input:, output: }` rate hash. When a
   # model's list price changes on a known date, its value is instead an array
@@ -20,6 +21,7 @@ module Clauditor
     RATES = {
       "fable-5-1" => { input: 10.0, output: 50.0, cache_read: 0.25 },
       "fable-5" => { input: 10.0, output: 50.0 },
+      "opus-5-5" => { input: 4.0, output: 20.0, cache_read: 0.20 },
       "opus-5" => { input: 5.0, output: 25.0 },
       "opus-4-8" => { input: 5.0, output: 25.0 },
       "opus-4-7" => { input: 5.0, output: 25.0 },

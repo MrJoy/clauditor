@@ -133,5 +133,22 @@ module Clauditor
       assert_equal %w[opus-5 fable-5 fable-5-1],
         %w[fable-5-1 fable-5 opus-5].sort_by { |model| Pricing.sort_key(model) }
     end
+
+    def test_cost_for_applies_opus_5_5_rates_with_flat_cache_read_rate
+      usage = Usage.new(input: 1_000_000, output: 1_000_000, cache_read: 1_000_000,
+        cache_write_5m: 1_000_000, cache_write_1h: 1_000_000)
+
+      # Cache reads are a flat $0.20/MTok (0.05x input), not the usual 0.1x.
+      expected = 4.0 + 20.0 + 0.20 + (4.0 * 1.25) + (4.0 * 2.0)
+
+      assert_in_delta expected, Pricing.cost_for("claude-opus-5-5", usage), 1e-9
+    end
+
+    def test_known_and_sort_key_place_opus_5_5_after_opus_5
+      assert Pricing.known?("claude-opus-5-5")
+      assert_equal [ 2, "opus", [ 5, 5 ] ], Pricing.sort_key("claude-opus-5-5")
+      assert_equal %w[opus-4-8 opus-5 opus-5-5 fable-5-1],
+        %w[fable-5-1 opus-5-5 opus-4-8 opus-5].sort_by { |model| Pricing.sort_key(model) }
+    end
   end
 end
