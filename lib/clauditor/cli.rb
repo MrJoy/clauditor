@@ -82,14 +82,20 @@ module Clauditor
       end
     end
 
-    # Keeps rows whose model id starts with the given term, case-insensitively.
-    # Prefix (not substring) — `--model opus` matches `opus-4-8`. row.model is the
+    # Keeps rows whose model id equals the given term, case-insensitively. A
+    # trailing `*` makes it a prefix match instead — `--model opus-5` matches only
+    # `opus-5`, while `opus-5*` also matches `opus-5-5`. row.model is the
     # already-normalized/displayed id. Returns all rows when no term is set.
     def filter_models(rows, term)
       return rows if term.nil?
 
       needle = term.downcase
-      rows.select { |row| row.model.downcase.start_with?(needle) }
+      if needle.end_with?("*")
+        prefix = needle.delete_suffix("*")
+        rows.select { |row| row.model.downcase.start_with?(prefix) }
+      else
+        rows.select { |row| row.model.downcase == needle }
+      end
     end
 
     # --rollup-only flags: mutually exclusive with --anthropic and with each
@@ -196,7 +202,7 @@ module Clauditor
           options[:project] = name
         end
 
-        opts.on("--model NAME", "Only include models whose id starts with NAME (prefix match)") do |name|
+        opts.on("--model NAME", "Only include the model with id NAME (suffix with * to prefix-match)") do |name|
           options[:model] = name
         end
 

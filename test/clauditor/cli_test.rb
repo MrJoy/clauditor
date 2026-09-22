@@ -147,9 +147,9 @@ module Clauditor
       end
     end
 
-    def test_model_filter_matches_prefix_and_elides_model_column
+    def test_model_filter_matches_exactly_and_elides_model_column
       with_fixture_root do |root|
-        status, out, = run_cli([ "--root", root, "--utc", "--model", "opus" ])
+        status, out, = run_cli([ "--root", root, "--utc", "--model", "opus-4-8" ])
 
         assert_equal 0, status
         assert_includes out, "100" # opus row survives
@@ -157,9 +157,27 @@ module Clauditor
       end
     end
 
+    def test_model_filter_without_star_does_not_prefix_match
+      with_fixture_root do |root|
+        _status, out, = run_cli([ "--root", root, "--utc", "--model", "opus" ])
+
+        refute_includes out, "100" # the opus-4-8 row's input tokens
+      end
+    end
+
+    def test_model_filter_trailing_star_prefix_matches
+      with_fixture_root do |root|
+        status, out, = run_cli([ "--root", root, "--utc", "--model", "opus*" ])
+
+        assert_equal 0, status
+        assert_includes out, "100"
+        refute_includes out.lines.first, "Model"
+      end
+    end
+
     def test_model_filter_case_insensitive
       with_fixture_root do |root|
-        status, out, = run_cli([ "--root", root, "--utc", "--model", "OPUS" ])
+        status, out, = run_cli([ "--root", root, "--utc", "--model", "OPUS-4-8" ])
 
         assert_equal 0, status
         assert_includes out, "100"
@@ -169,9 +187,29 @@ module Clauditor
 
     def test_model_filter_excludes_non_matching
       with_fixture_root do |root|
-        _status, out, = run_cli([ "--root", root, "--utc", "--model", "haiku" ])
+        _status, out, = run_cli([ "--root", root, "--utc", "--model", "haiku*" ])
 
-        refute_includes out, "opus-4-8"
+        refute_includes out, "100" # the opus-4-8 row's input tokens
+      end
+    end
+
+    def test_model_filter_distinguishes_exact_from_star_across_versions
+      Dir.mktmpdir do |root|
+        File.write(File.join(root, "s.jsonl"), <<~JSONL)
+          {"type":"assistant","cwd":"/Users/me/proj","timestamp":"2026-06-07T12:00:00.000Z","message":{"id":"a1","model":"claude-opus-5","usage":{"input_tokens":100,"output_tokens":10}}}
+          {"type":"assistant","cwd":"/Users/me/proj","timestamp":"2026-06-07T12:00:00.000Z","message":{"id":"a2","model":"claude-opus-5-5","usage":{"input_tokens":50,"output_tokens":5}}}
+        JSONL
+
+        _status, exact, = run_cli([ "--root", root, "--utc", "--model", "opus-5" ])
+        _status, starred, = run_cli([ "--root", root, "--utc", "--model", "opus-5*" ])
+
+        # Exact: only opus-5 survives, so the Model column is elided.
+        refute_includes exact.lines.first, "Model"
+        refute_includes exact, "opus-5-5"
+        # Starred: both versions survive and the Model column stays.
+        assert_includes starred.lines.first, "Model"
+        assert_includes starred, "opus-5-5"
+        assert_match(/opus-5\s/, starred)
       end
     end
 
@@ -197,7 +235,7 @@ module Clauditor
     def test_model_filter_from_config_default
       Dir.mktmpdir do |dir|
         config = File.join(dir, "cfg.yml")
-        File.write(config, "model: opus\n")
+        File.write(config, "model: opus*\n")
         with_fixture_root do |root|
           status, out, = run_cli([ "--root", root, "--utc" ], config_path: config)
 
