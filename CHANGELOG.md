@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-09-29
+
 ### Added
 
 - `--root` (and the `roots` config key) accept a Claude Code config directory such as `~/.claude` or `~/.claude-work`. A directory with a `projects/` subdirectory resolves to it, so other `*.jsonl` files in the config dir (history, jobs) aren't scanned, and `~/.claude` shares a stored dataset with `~/.claude/projects`.
@@ -20,6 +22,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Adding or removing a `--root` no longer hides stored history. Since 0.0.2 the dataset was keyed by the whole root set, so any new combination of roots started empty and fell back to whatever transcripts Claude Code still retained (about 30 days). Older days stayed in the previous dataset file, which nothing read.
 - Sonnet 5 stays at $2/$10 per MTok. Anthropic cancelled the scheduled 2026-09-01 increase to $3/$15, which clauditor had been applying to usage from September onward.
+
+### Security
+
+- Update `json` to 2.21.2 for CVE-2026-71847 (use-after-free crash in `JSON::ResumableParser` on truncated duplicate-key streams).
 
 ## [0.0.3] - 2026-09-22
 
@@ -40,7 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- The persistent dataset is now keyed by the (sorted, de-duplicated) root set rather than a single root. Existing single-root caches are invalidated once and rebuilt on the next run. A consequence this entry originally left out: every distinct root set got its own empty dataset, so changing roots dropped history older than transcript retention from reports. Fixed in the release after 0.0.3.
+- The persistent dataset is now keyed by the (sorted, de-duplicated) root set rather than a single root. Existing single-root caches are invalidated once and rebuilt on the next run. A consequence this entry originally left out: every distinct root set got its own empty dataset, so changing roots dropped history older than transcript retention from reports. Fixed in 0.0.4.
 
 ## [0.0.1] - 2026-06-10
 
@@ -53,7 +59,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Persistent dataset under `~/.clauditor` so history survives Claude Code's transcript retention window.
 - `--version` option.
 
-[Unreleased]: https://github.com/MrJoy/clauditor/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/MrJoy/clauditor/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/MrJoy/clauditor/releases/tag/v0.0.4
 [0.0.3]: https://github.com/MrJoy/clauditor/releases/tag/v0.0.3
 [0.0.2]: https://github.com/MrJoy/clauditor/releases/tag/v0.0.2
 [0.0.1]: https://github.com/MrJoy/clauditor/releases/tag/v0.0.1
