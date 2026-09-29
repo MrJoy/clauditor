@@ -78,13 +78,14 @@ module Clauditor
     # — it can't be placed in time — the current, open-ended tier applies.
     def rates_for(model, date = nil)
       entry = RATES[normalize_model(model)]
-      return entry unless entry.is_a?(Array)
+      entry.is_a?(Array) ? tier_for(entry, date) : entry
+    end
 
-      if date && date != "unknown"
-        entry.find { |tier| tier[:until].nil? || date <= tier[:until] }
-      else
-        entry.last
-      end
+    # Picks the active tier from an oldest-first tier list (see RATES).
+    def tier_for(tiers, date)
+      return tiers.last if date.nil? || date == "unknown"
+
+      tiers.find { |tier| tier[:until].nil? || date <= tier[:until] }
     end
 
     # USD cost for a Usage under the given model on the given day, or nil when

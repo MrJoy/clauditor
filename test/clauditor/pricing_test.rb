@@ -69,31 +69,48 @@ module Clauditor
       assert_nil Pricing.cost_for("qwen3.6:27b-coding-nvfp4", usage)
     end
 
-    def test_cost_for_applies_sonnet_5_introductory_rates_through_august
-      usage = Usage.new(input: 1_000_000, output: 1_000_000)
+    def test_cost_for_applies_sonnet_5_rates_before_and_after_the_cancelled_increase
+      usage = Usage.new(input: 1_000_000, output: 1_000_000, cache_read: 1_000_000)
 
-      expected = 2.0 + 10.0 # $2/$10 per MTok through 2026-08-31
+      expected = 2.0 + 10.0 + 0.2 # the scheduled 2026-09-01 move to $3/$15 never happened
 
-      assert_in_delta expected, Pricing.cost_for("claude-sonnet-5", usage, "2026-08-31"), 1e-9
-      assert_in_delta expected, Pricing.cost_for("claude-sonnet-5", usage, "2026-06-30"), 1e-9
+      [ "2026-06-30", "2026-09-01", "2027-01-15", nil ].each do |day|
+        assert_in_delta expected, Pricing.cost_for("claude-sonnet-5", usage, day), 1e-9
+      end
     end
 
-    def test_cost_for_applies_sonnet_5_standard_rates_from_september
-      usage = Usage.new(input: 1_000_000, output: 1_000_000)
+    def test_cost_for_applies_sonnet_5_5_rates
+      usage = Usage.new(input: 1_000_000, output: 1_000_000, cache_read: 1_000_000,
+        cache_write_5m: 1_000_000, cache_write_1h: 1_000_000)
 
-      expected = 3.0 + 15.0 # $3/$15 per MTok from 2026-09-01
+      expected = 2.0 + 10.0 + 0.2 + 2.5 + 4.0
 
-      assert_in_delta expected, Pricing.cost_for("claude-sonnet-5", usage, "2026-09-01"), 1e-9
-      assert_in_delta expected, Pricing.cost_for("claude-sonnet-5", usage, "2027-01-15"), 1e-9
+      assert_in_delta expected, Pricing.cost_for("claude-sonnet-5-5", usage), 1e-9
     end
 
-    def test_cost_for_sonnet_5_defaults_to_current_tier_without_date
-      usage = Usage.new(input: 1_000_000, output: 1_000_000)
+    def test_known_and_sort_key_place_sonnet_5_5_after_sonnet_5
+      assert Pricing.known?("claude-sonnet-5-5")
+      assert_equal %w[sonnet-4-6 sonnet-5 sonnet-5-5 opus-4-8],
+        %w[opus-4-8 sonnet-5-5 sonnet-4-6 sonnet-5].sort_by { |model| Pricing.sort_key(model) }
+    end
 
-      standard = 3.0 + 15.0 # open-ended tier when the day can't be placed in time
+    TIERS = [
+      { until: "2026-08-31", input: 2.0, output: 10.0 },
+      { input: 3.0, output: 15.0 },
+    ].freeze
 
-      assert_in_delta standard, Pricing.cost_for("claude-sonnet-5", usage), 1e-9
-      assert_in_delta standard, Pricing.cost_for("claude-sonnet-5", usage, "unknown"), 1e-9
+    def test_tier_for_uses_earlier_tier_through_its_inclusive_cutoff
+      assert_equal 2.0, Pricing.tier_for(TIERS, "2026-08-31")[:input]
+      assert_equal 2.0, Pricing.tier_for(TIERS, "2026-06-30")[:input]
+    end
+
+    def test_tier_for_uses_open_ended_tier_after_the_cutoff
+      assert_equal 3.0, Pricing.tier_for(TIERS, "2026-09-01")[:input]
+    end
+
+    def test_tier_for_defaults_to_current_tier_without_a_placeable_day
+      assert_equal 3.0, Pricing.tier_for(TIERS, nil)[:input]
+      assert_equal 3.0, Pricing.tier_for(TIERS, "unknown")[:input]
     end
 
     def test_known_and_sort_key_handle_sonnet_5
