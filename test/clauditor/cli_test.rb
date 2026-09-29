@@ -139,6 +139,25 @@ module Clauditor
       end
     end
 
+    def test_root_accepts_claude_config_dirs
+      with_fixture_root do |transcripts|
+        Dir.mktmpdir do |claude_dir|
+          FileUtils.mkdir_p(File.join(claude_dir, "projects"))
+          FileUtils.cp(File.join(transcripts, "s.jsonl"), File.join(claude_dir, "projects", "s.jsonl"))
+          # Sits outside projects/ and must not be scanned.
+          File.write(File.join(claude_dir, "history.jsonl"), <<~JSONL)
+            {"type":"assistant","cwd":"/Users/me/stray","timestamp":"2026-06-07T12:00:00.000Z","message":{"id":"h1","model":"claude-haiku-4-5","usage":{"input_tokens":1,"output_tokens":1}}}
+          JSONL
+
+          status, out, = run_cli([ "--root", claude_dir, "--utc" ])
+
+          assert_equal 0, status
+          assert_includes out, "proj"
+          refute_includes out, "stray"
+        end
+      end
+    end
+
     def test_project_filter_excludes_non_matching
       with_fixture_root do |root|
         _status, out, = run_cli([ "--root", root, "--utc", "--project", "nonexistent" ])
@@ -263,6 +282,105 @@ module Clauditor
           assert_equal 0, status
           assert_includes out, "2026-06-07"
           assert_includes out, "100"
+        end
+      end
+    end
+
+    def test_changing_roots_keeps_each_roots_persisted_history
+      with_fixture_root do |a|
+        Dir.mktmpdir do |b|
+          Dir.mktmpdir do |store_dir|
+            File.write(File.join(b, "s.jsonl"), <<~JSONL)
+              {"type":"assistant","cwd":"/Users/me/other","timestamp":"2026-06-08T12:00:00.000Z","message":{"id":"b1","model":"claude-haiku-4-5","usage":{"input_tokens":50,"output_tokens":5}}}
+            JSONL
+            store = [ "--utc", "--store-dir", store_dir ]
+
+            run_cli([ "--root", a, *store ], store: true)
+            # a's transcript ages out; only the store remembers 2026-06-07.
+            File.delete(File.join(a, "s.jsonl"))
+
+            _status, both, = run_cli([ "--root", a, "--root", b, *store ], store: true)
+            _status, b_only, = run_cli([ "--root", b, *store ], store: true)
+            _status, a_again, = run_cli([ "--root", a, *store ], store: true)
+
+            assert_includes both, "2026-06-07"
+            assert_includes both, "2026-06-08"
+            refute_includes b_only, "2026-06-07"
+            assert_includes a_again, "2026-06-07"
+            assert_includes a_again, "100"
+          end
+        end
+      end
+    end
+
+    def test_nested_roots_are_not_counted_twice_across_stores
+      with_fixture_root do |root|
+        Dir.mktmpdir do |store_dir|
+          nested = File.join(root, "nested")
+          FileUtils.mkdir_p(nested)
+          FileUtils.mv(File.join(root, "s.jsonl"), File.join(nested, "s.jsonl"))
+          args = [ "--root", root, "--root", nested, "--utc", "--format", "json", "--store-dir", store_dir ]
+
+          run_cli(args, store: true)
+          _status, out, = run_cli(args, store: true)
+
+          assert_equal [ 100 ], JSON.parse(out).map { |row| row["input_tokens"] }
+          assert_equal 1, Dir.glob(File.join(store_dir, "*.json")).size
+        end
+      end
+    end
+
+    def write_archive(store_dir, roots, rows, name: "archive", complete_through: "2026-06-08")
+      path = File.join(store_dir, "usage-utc-#{name}.json")
+      File.write(path, JSON.generate(version: Store::VERSION, roots: roots, timezone: "utc", complete_through: complete_through, rows: rows))
+      path
+    end
+
+    def archive_row(date, input, project: "/Users/me/proj")
+      { project: project, date: date, model: "opus-4-8", input: input, output: 0 }
+    end
+
+    def input_by_date(out)
+      JSON.parse(out).to_h { |row| [ row["date"], row["input_tokens"] ] }
+    end
+
+    def test_root_set_archive_reconciles_with_its_roots_by_per_cell_max
+      with_fixture_root do |a|
+        Dir.mktmpdir do |b|
+          Dir.mktmpdir do |store_dir|
+            # A 0.0.3 dataset for {a, b}: 2026-05-01 predates every transcript,
+            # and 2026-06-07 repeats a's fixture day plus b's usage.
+            archive = write_archive(store_dir, [ a, b ], [ archive_row("2026-05-01", 7), archive_row("2026-06-07", 150) ])
+            args = [ "--root", a, "--root", b, "--utc", "--format", "json", "--store-dir", store_dir ]
+
+            _status, first, = run_cli(args, store: true)
+            _status, second, = run_cli(args, store: true)
+
+            expected = { "2026-05-01" => 7, "2026-06-07" => 150 }
+            assert_equal expected, input_by_date(first)
+            assert_equal expected, input_by_date(second)
+            assert_equal 2, JSON.parse(File.read(archive))["rows"].size
+
+            # Alone, a can't use the {a, b} archive, but its own store kept 06-07.
+            _status, a_only, = run_cli([ "--root", a, "--utc", "--format", "json", "--store-dir", store_dir ], store: true)
+            assert_equal({ "2026-06-07" => 100 }, input_by_date(a_only))
+          end
+        end
+      end
+    end
+
+    def test_most_recent_archive_wins_when_archives_share_a_root
+      with_fixture_root do |a|
+        Dir.mktmpdir do |b|
+          Dir.mktmpdir do |store_dir|
+            File.delete(File.join(a, "s.jsonl"))
+            write_archive(store_dir, [ a, b ], [ archive_row("2026-05-01", 1) ], name: "older", complete_through: "2026-05-31")
+            write_archive(store_dir, [ a, b ], [ archive_row("2026-05-01", 2) ], name: "newer", complete_through: "2026-06-08")
+
+            _status, out, = run_cli([ "--root", a, "--root", b, "--utc", "--format", "json", "--store-dir", store_dir ], store: true)
+
+            assert_equal({ "2026-05-01" => 2 }, input_by_date(out))
+          end
         end
       end
     end

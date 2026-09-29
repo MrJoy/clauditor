@@ -24,20 +24,46 @@ module Clauditor
         return 1
       end
 
-      store = options[:store] ? Store.new(roots: options[:roots], timezone: options[:timezone], dir: options[:store_dir]) : nil
+      roots = SessionLoader.disjoint_roots(options[:roots])
+      # One Store per root, so changing the root set never hides another
+      # root's persisted history.
+      stores =
+        if options[:store]
+          roots.to_h { |root| [ root, Store.new(root: root, timezone: options[:timezone], dir: options[:store_dir]) ] }
+        else
+          {}
+        end
 
-      aggregator = Aggregator.new(timezone: options[:timezone], skip_through: store&.complete_through, remap: options[:remap])
-      store&.each_row do |project, date, model, usage|
-        aggregator.seed(project: project, date: date, model: model, usage: usage)
+      archives = options[:store] ? usable_archives(roots, timezone: options[:timezone], dir: options[:store_dir]) : []
+
+      aggregator = Aggregator.new(
+        timezone: options[:timezone],
+        skip_through: stores.transform_values(&:complete_through),
+        remap: options[:remap],
+        archived: archives.flat_map { |archive| archive.roots.map { |root| [ root, archive.path ] } }.to_h,
+      )
+      stores.each do |root, store|
+        store.each_row do |project, date, model, usage|
+          aggregator.seed(project: project, date: date, model: model, usage: usage, root: root)
+        end
+      end
+      # Archive cells seed under the archive's file path rather than a root,
+      # so no root's Store saves them.
+      archives.each do |archive|
+        archive.each_row do |project, date, model, usage|
+          aggregator.seed(project: project, date: date, model: model, usage: usage, root: archive.path)
+        end
       end
 
-      loader = SessionLoader.new(roots: options[:roots], since: store&.cutoff_time)
-      loader.each_record { |record| aggregator.add(record) }
+      roots.each do |root|
+        loader = SessionLoader.new(root: root, since: stores[root]&.cutoff_time)
+        loader.each_record { |record| aggregator.add(record, root: root) }
+      end
 
       rows = aggregator.rows
       # Persist before filtering: the dataset stays complete even when this
       # run only displays a subset.
-      store&.save(rows)
+      stores.each { |root, store| store.save(aggregator.rows(root: root)) }
 
       rows = filter_projects(rows, options[:project])
       rows = filter_models(rows, options[:model])
@@ -69,6 +95,20 @@ module Clauditor
     end
 
     private
+
+    # Archives this run can show: those whose roots it scans in full (a
+    # partial match would pull in roots the run left out). When archives share
+    # a root, the most recently completed one wins, so none double-count.
+    def usable_archives(roots, timezone:, dir:)
+      candidates = Store.archives(timezone: timezone, dir: dir)
+        .select { |archive| (archive.roots - roots).empty? }
+        .sort_by { |archive| [ archive.complete_through, archive.roots.size, archive.path ] }
+        .reverse
+
+      candidates.each_with_object([]) do |archive, chosen|
+        chosen << archive if chosen.none? { |other| other.roots.intersect?(archive.roots) }
+      end
+    end
 
     # Keeps rows whose project path (or its ~-relative display) contains the
     # given term, case-insensitively. Returns all rows when no term is set.
@@ -206,8 +246,8 @@ module Clauditor
           options[:model] = name
         end
 
-        opts.on("--root DIR", "Session transcripts directory; repeatable (default: ~/.claude/projects)") do |dir|
-          cli_roots << File.expand_path(dir)
+        opts.on("--root DIR", "Transcripts dir or Claude config dir (e.g. ~/.claude); repeatable (default: ~/.claude/projects)") do |dir|
+          cli_roots << SessionLoader.resolve_root(dir)
         end
 
         opts.on("--no-store", "Neither read nor update the persistent dataset") do

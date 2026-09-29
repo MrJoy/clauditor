@@ -160,9 +160,9 @@ module Clauditor
 
     def test_ignores_non_assistant_and_usageless_records
       agg = Aggregator.new(timezone: :utc)
-      agg.add("type" => "user", "message" => { "role" => "user" })
-      agg.add("type" => "assistant", "message" => { "id" => "x", "model" => "claude-opus-4-8" })
-      agg.add("type" => "system")
+      agg.add({ "type" => "user", "message" => { "role" => "user" } })
+      agg.add({ "type" => "assistant", "message" => { "id" => "x", "model" => "claude-opus-4-8" } })
+      agg.add({ "type" => "system" })
 
       assert_empty agg.rows
     end
@@ -190,6 +190,42 @@ module Clauditor
       agg.add(assistant(id: "a", cwd: "/Users/me/proj", timestamp: nil))
 
       assert_equal "unknown", agg.rows.first.date
+    end
+
+    def test_skip_through_hash_covers_each_root_separately
+      agg = Aggregator.new(timezone: :utc, skip_through: { "/a" => "2026-06-07" })
+      agg.add(assistant(id: "covered", cwd: "/Users/me/proj"), root: "/a") # 2026-06-07
+      agg.add(assistant(id: "fresh", cwd: "/Users/me/proj"), root: "/b")
+
+      assert_equal 1, agg.rows.size
+      assert_equal [ [], [ "2026-06-07" ] ], [ "/a", "/b" ].map { |root| agg.rows(root: root).map(&:date) }
+    end
+
+    def test_rows_for_a_root_hold_only_that_roots_cells
+      agg = Aggregator.new(timezone: :utc)
+      agg.seed(project: "/Users/me/proj", date: "2026-06-06", model: "opus-4-8", usage: Usage.new(input: 7), root: "/a")
+      agg.add(assistant(id: "b1", cwd: "/Users/me/proj"), root: "/b")
+
+      assert_equal %w[2026-06-06 2026-06-07], agg.rows.map(&:date)
+      assert_equal %w[2026-06-06], agg.rows(root: "/a").map(&:date)
+      assert_equal %w[2026-06-07], agg.rows(root: "/b").map(&:date)
+    end
+
+    def test_archived_roots_merge_with_their_archive_by_per_cell_max
+      agg = Aggregator.new(timezone: :utc, archived: { "/a" => "arch", "/b" => "arch" })
+      cell = ->(date, usage, root) { agg.seed(project: "/Users/me/proj", date: date, model: "opus-4-8", usage: usage, root: root) }
+      # The archive lost part of 06-05 that /a and /b kept, and vice versa on 06-06.
+      cell.("2026-06-05", Usage.new(input: 3, output: 9), "arch")
+      cell.("2026-06-05", Usage.new(input: 5, output: 1), "/a")
+      cell.("2026-06-05", Usage.new(input: 2, output: 1), "/b")
+      cell.("2026-06-06", Usage.new(input: 8), "arch")
+      cell.("2026-06-06", Usage.new(input: 4), "/a")
+      cell.("2026-06-06", Usage.new(input: 1), "/c")
+
+      merged = agg.rows.to_h { |r| [ r.date, [ r.usage.input, r.usage.output ] ] }
+
+      assert_equal({ "2026-06-05" => [ 7, 9 ], "2026-06-06" => [ 9, 0 ] }, merged)
+      assert_equal [ 5, 4 ], agg.rows(root: "/a").map { |r| r.usage.input }
     end
 
     def test_seeded_cells_merge_with_live_records

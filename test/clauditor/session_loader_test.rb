@@ -65,6 +65,30 @@ module Clauditor
       end
     end
 
+    def test_resolve_root_descends_into_a_claude_config_dirs_projects
+      Dir.mktmpdir do |dir|
+        FileUtils.mkdir_p(File.join(dir, "projects"))
+
+        assert_equal File.join(dir, "projects"), SessionLoader.resolve_root(dir)
+      end
+    end
+
+    def test_resolve_root_leaves_a_transcripts_dir_alone
+      Dir.mktmpdir do |dir|
+        assert_equal dir, SessionLoader.resolve_root(dir)
+      end
+    end
+
+    def test_resolve_root_expands_the_path
+      assert_equal File.expand_path("~/nowhere-clauditor"), SessionLoader.resolve_root("~/nowhere-clauditor")
+    end
+
+    def test_disjoint_roots_drops_duplicates_and_nested_roots
+      roots = [ "/a/projects", "/a/projects/deep", "/b", "/a/projects", "/bb" ]
+
+      assert_equal [ "/a/projects", "/b", "/bb" ], SessionLoader.disjoint_roots(roots)
+    end
+
     def test_each_record_without_block_returns_enumerator
       Dir.mktmpdir do |root|
         File.write(File.join(root, "s.jsonl"), %({"type":"assistant"}\n))

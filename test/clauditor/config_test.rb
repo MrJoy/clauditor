@@ -91,6 +91,15 @@ module Clauditor
       end
     end
 
+    def test_roots_accept_a_claude_config_dir
+      Dir.mktmpdir do |dir|
+        FileUtils.mkdir_p(File.join(dir, "projects"))
+        with_config("roots:\n  - #{dir}\n") do |path|
+          assert_equal [ File.join(dir, "projects") ], Config.load(path: path)[:roots]
+        end
+      end
+    end
+
     def test_invalid_format_raises
       with_config("format: xml\n") do |path|
         error = assert_raises(ArgumentError) { Config.load(path: path) }

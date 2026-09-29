@@ -58,5 +58,17 @@ module Clauditor
         cache_write_1h: cache_write_1h + other.cache_write_1h,
       )
     end
+
+    # The larger of each dimension. For two undercounts of the same usage
+    # (sources that each lost some transcripts), this is the tighter bound.
+    def max(other)
+      self.class.new(
+        input: [ input, other.input ].max,
+        output: [ output, other.output ].max,
+        cache_read: [ cache_read, other.cache_read ].max,
+        cache_write_5m: [ cache_write_5m, other.cache_write_5m ].max,
+        cache_write_1h: [ cache_write_1h, other.cache_write_1h ].max,
+      )
+    end
   end
 end

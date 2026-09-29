@@ -9,6 +9,27 @@ module Clauditor
   class SessionLoader
     DEFAULT_ROOT = File.expand_path("~/.claude/projects")
 
+    # Expands a user-supplied root. A Claude Code config directory (~/.claude,
+    # or any CLAUDE_CONFIG_DIR) holds its transcripts under projects/ next to
+    # other *.jsonl files (history, jobs) that aren't sessions, so a directory
+    # with a projects/ child resolves to that child. Resolving up front also
+    # keeps ~/.claude and ~/.claude/projects on the same Store key.
+    def self.resolve_root(dir)
+      dir = File.expand_path(dir)
+      projects = File.join(dir, "projects")
+      File.directory?(projects) ? projects : dir
+    end
+
+    # De-duplicates a root list and drops any root nested inside another, so
+    # every transcript belongs to exactly one root (and so one Store). The
+    # outer root already globs into the nested one.
+    def self.disjoint_roots(roots)
+      roots = roots.uniq
+      roots.reject do |root|
+        roots.any? { |other| other != root && root.start_with?(File.join(other, "")) }
+      end
+    end
+
     # Scans one or more roots: pass a single `root:` or a `roots:` list (both
     # default to ~/.claude/projects). since: skip files last modified before
     # this Time. Record timestamps never exceed the file's mtime (lines are

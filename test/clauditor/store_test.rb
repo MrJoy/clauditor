@@ -110,33 +110,68 @@ module Clauditor
       end
     end
 
-    def test_store_files_are_keyed_by_roots_and_timezone
+    def test_store_files_are_keyed_by_root_and_timezone
       Dir.mktmpdir do |dir|
-        utc = Store.new(roots: [ "/sessions" ], timezone: :utc, dir: dir, now: NOW)
-        local = Store.new(roots: [ "/sessions" ], timezone: :local, dir: dir, now: NOW)
-        other = Store.new(roots: [ "/other" ], timezone: :utc, dir: dir, now: NOW)
-        many = Store.new(roots: [ "/sessions", "/other" ], timezone: :utc, dir: dir, now: NOW)
+        utc = Store.new(root: "/sessions", timezone: :utc, dir: dir, now: NOW)
+        local = Store.new(root: "/sessions", timezone: :local, dir: dir, now: NOW)
+        other = Store.new(root: "/other", timezone: :utc, dir: dir, now: NOW)
 
-        assert_equal 4, [ utc.path, local.path, other.path, many.path ].uniq.size
+        assert_equal 3, [ utc.path, local.path, other.path ].uniq.size
       end
     end
 
-    def test_root_set_key_ignores_order_and_duplicates
+    def test_loads_datasets_written_under_the_one_root_set_key
       Dir.mktmpdir do |dir|
-        canonical = Store.new(roots: [ "/a", "/b" ], timezone: :utc, dir: dir, now: NOW)
-        shuffled = Store.new(roots: [ "/b", "/a", "/a" ], timezone: :utc, dir: dir, now: NOW)
+        # Before per-root storage, a one-root set hashed "/sessions" and wrote
+        # `roots: ["/sessions"]`; that file must still load.
+        legacy = File.join(dir, "usage-utc-#{Digest::SHA256.hexdigest("/sessions")[0, 12]}.json")
+        payload = {
+          version: Store::VERSION,
+          roots: [ "/sessions" ],
+          timezone: "utc",
+          complete_through: "2026-06-08",
+          rows: [ { project: "/Users/me/proj", date: "2026-06-07", model: "opus-4-8", input: 7 } ],
+        }
+        File.write(legacy, JSON.generate(payload))
 
-        assert_equal canonical.path, shuffled.path
-      end
-    end
+        store = build(dir)
 
-    def test_single_root_roundtrips_across_roots_and_root_aliases
-      Dir.mktmpdir do |dir|
-        Store.new(roots: [ "/sessions" ], timezone: :utc, dir: dir, now: NOW).save([ row ])
-        store = Store.new(root: "/sessions", timezone: :utc, dir: dir, now: NOW)
-
+        assert_equal legacy, store.path
         assert_equal "2026-06-08", store.complete_through
-        assert_equal "2026-06-07", cells(store).first[1]
+        assert_equal 7, cells(store).first[3].input
+      end
+    end
+
+    def write_dataset(dir, name, roots:, rows: [], timezone: "utc", complete_through: "2026-06-08")
+      path = File.join(dir, "usage-#{timezone}-#{name}.json")
+      payload = { version: Store::VERSION, roots: roots, timezone: timezone, complete_through: complete_through, rows: rows }
+      File.write(path, JSON.generate(payload))
+      path
+    end
+
+    def test_archives_are_root_set_datasets_not_per_root_ones
+      Dir.mktmpdir do |dir|
+        build(dir).save([ row ])
+        combined = write_dataset(dir, "combined", roots: [ "/b", "/a" ],
+          rows: [ { project: "/p", date: "2026-05-01", model: "opus-4-8", input: 9 } ])
+        write_dataset(dir, "local", roots: [ "/a", "/b" ], timezone: "local")
+
+        archives = Store.archives(timezone: :utc, dir: dir)
+
+        assert_equal [ combined ], archives.map(&:path)
+        assert_equal [ "/a", "/b" ], archives.first.roots
+        assert_equal 9, [].tap { |acc| archives.first.each_row { |*cell| acc << cell } }.first[3].input
+      end
+    end
+
+    def test_one_root_dataset_whose_root_now_resolves_elsewhere_is_an_archive
+      Dir.mktmpdir do |dir|
+        Dir.mktmpdir do |claude_dir|
+          FileUtils.mkdir_p(File.join(claude_dir, "projects"))
+          write_dataset(dir, "old", roots: [ claude_dir ])
+
+          assert_equal [ [ File.join(claude_dir, "projects") ] ], Store.archives(timezone: :utc, dir: dir).map(&:roots)
+        end
       end
     end
   end

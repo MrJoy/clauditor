@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `--root` (and the `roots` config key) accept a Claude Code config directory such as `~/.claude` or `~/.claude-work`. A directory with a `projects/` subdirectory resolves to it, so other `*.jsonl` files in the config dir (history, jobs) aren't scanned, and `~/.claude` shares a stored dataset with `~/.claude/projects`.
+- Add Sonnet 5.5 pricing ($2/$10 per MTok).
+
+### Changed
+
+- The persistent dataset is stored per root instead of per root set. Each run loads and saves one file for each root it scans, and a root nested inside another root is dropped, since the outer root already covers it. The file for a single root keeps the name and format that root had under 0.0.2 and 0.0.3, so a default-root dataset carries over as-is.
+- Datasets from 0.0.2 and 0.0.3 that don't match a single current root are kept as read-only archives. That covers multi-root datasets, plus single-root ones whose root now resolves to its `projects/` subdirectory. They can't be split by root, so a run uses an archive only when it scans every root the archive covers. It then takes, cell by cell, the larger of the archive's figure and the sum of those roots' own figures, because either source may have lost transcripts the other kept. A run that includes only some of an archive's roots doesn't use it, and falls back to those roots' own datasets for the days the archive held.
+
+### Fixed
+
+- Adding or removing a `--root` no longer hides stored history. Since 0.0.2 the dataset was keyed by the whole root set, so any new combination of roots started empty and fell back to whatever transcripts Claude Code still retained (about 30 days). Older days stayed in the previous dataset file, which nothing read.
+- Sonnet 5 stays at $2/$10 per MTok. Anthropic cancelled the scheduled 2026-09-01 increase to $3/$15, which clauditor had been applying to usage from September onward.
+
 ## [0.0.3] - 2026-09-22
 
 ### Added
@@ -25,7 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- The persistent dataset is now keyed by the (sorted, de-duplicated) root set rather than a single root. Existing single-root caches are invalidated once and rebuilt on the next run.
+- The persistent dataset is now keyed by the (sorted, de-duplicated) root set rather than a single root. Existing single-root caches are invalidated once and rebuilt on the next run. A consequence this entry originally left out: every distinct root set got its own empty dataset, so changing roots dropped history older than transcript retention from reports. Fixed in the release after 0.0.3.
 
 ## [0.0.1] - 2026-06-10
 

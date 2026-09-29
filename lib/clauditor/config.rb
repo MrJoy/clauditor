@@ -65,14 +65,15 @@ module Clauditor
       end
     end
 
-    # Accepts either a single path string or a list of them, expanding each.
+    # Accepts either a single path string or a list of them, resolving each
+    # (a Claude config dir maps to its projects/ subdirectory).
     def self.roots(value, path)
       list = value.is_a?(Array) ? value : [ value ]
       if list.empty? || list.any? { |dir| !dir.is_a?(String) || dir.strip.empty? }
         raise ArgumentError, "#{path}: 'roots' must be a path or non-empty list of paths"
       end
 
-      list.map { |dir| File.expand_path(dir) }
+      list.map { |dir| SessionLoader.resolve_root(dir) }
     end
 
     # Config-only (no CLI equivalent): a mapping of project path => project

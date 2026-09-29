@@ -10,7 +10,9 @@ via `ollama launch claude`), but does not track any applicable pricing.
 
 Completed days are persisted to `~/.clauditor`, so history survives Claude Code's ~30-day
 transcript retention window and repeat runs only re-scan recent files. The current day is always
-recomputed live and never persisted. Use `--no-store` to bypass the dataset entirely, or
+recomputed live and never persisted. Each root keeps its own dataset, so adding or dropping a
+`--root` never hides another root's history. Datasets from 0.0.2 and 0.0.3 that covered several roots
+at once are still read, whenever a run includes all of those roots. Use `--no-store` to bypass the dataset entirely, or
 `--store-dir DIR` to relocate it.
 
 ## Setup
@@ -50,7 +52,7 @@ bundle exec bin/clauditor [options]
 | `--days N` | With `--rollup`: keep only the last `N` days, **including today**, in the active timezone. Rollup-only; error otherwise. Mutually exclusive with `--since`. |
 | `--since DATE` | With `--rollup`: keep only rows dated on or after `DATE` (`YYYY-MM-DD`). Rollup-only; error otherwise. Mutually exclusive with `--days`. |
 | `--project NAME` | Only include projects whose path (or its `~`-relative display) contains `NAME`, case-insensitively. |
-| `--root DIR` | Session transcripts directory (default: `~/.claude/projects`). **Repeatable** — pass `--root` multiple times to scan several trees in one report. Overlapping/nested roots are de-duplicated. |
+| `--root DIR` | Session transcripts directory (default: `~/.claude/projects`), or a Claude Code config directory such as `~/.claude`, which resolves to its `projects/` subdirectory. **Repeatable** — pass `--root` multiple times to scan several trees in one report. Overlapping/nested roots are de-duplicated. |
 | `--no-store` | Neither read nor update the persistent dataset. Forces a full live scan. |
 | `--store-dir DIR` | Persistent dataset directory (default: `~/.clauditor`). |
 | `-h`, `--help` | Show help and exit. |
@@ -107,6 +109,9 @@ bundle exec bin/clauditor --no-store --root /path/to/transcripts
 # Several transcript trees in a single report
 bundle exec bin/clauditor --root ~/.claude/projects --root /mnt/backup/claude-projects
 
+# Several Claude Code config dirs (e.g. one per CLAUDE_CONFIG_DIR)
+bundle exec bin/clauditor --root ~/.claude --root ~/.claude-work
+
 # All-time totals per project and model
 bundle exec bin/clauditor --rollup
 
@@ -123,8 +128,9 @@ instead of typing them each run. **Flags passed on the command line override the
 
 ```yaml
 # ~/.clauditor_config — all keys optional
-roots:                         # one or more transcript trees (or `root:` for a single string)
-  - ~/.claude/projects
+roots:                         # one or more transcript trees or Claude config dirs (or `root:` for a single string)
+  - ~/.claude
+  - ~/.claude-work
   - /mnt/backup/claude-projects
 format: table                  # table | csv | json
 utc: false                     # true buckets days by UTC

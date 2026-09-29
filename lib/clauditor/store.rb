@@ -18,16 +18,83 @@ module Clauditor
   # the next run. Today's data is still accruing, so it is always recomputed
   # live and never persisted.
   #
-  # Datasets are keyed by (roots, timezone) — day bucketing differs between
-  # --utc and local time, and a different set of --root dirs is a different
-  # dataset. The root set is sorted and de-duplicated so order and repeats
-  # don't fork the key. Token counts are persisted rather than costs, so
-  # pricing updates apply retroactively to historical days.
+  # Datasets are keyed by (root, timezone) — day bucketing differs between
+  # --utc and local time. Each root keeps its own dataset, so adding or
+  # dropping a --root never hides another root's history: a run opens one
+  # Store per root it scans, and a root left out keeps its file for when it
+  # returns. Token counts are persisted rather than costs, so pricing updates
+  # apply retroactively to historical days.
   class Store
     VERSION = 2
     DEFAULT_DIR = File.expand_path("~/.clauditor")
 
     DATE_PATTERN = /\A\d{4}-\d{2}-\d{2}\z/
+
+    # A dataset written under a key that no longer names a single root: a
+    # 0.0.2/0.0.3 root-set dataset, or a one-root dataset whose root now
+    # resolves elsewhere (e.g. ~/.claude before config dirs resolved to
+    # projects/). Its rows can't be split per root, so it is never rewritten;
+    # whenever a run includes all of `roots` (resolved), the Aggregator
+    # reconciles it cell by cell with those roots' own data.
+    Archive = Struct.new(:path, :roots, :complete_through, :rows, keyword_init: true) do
+      def each_row(&block)
+        Store.each_cell(rows, &block)
+      end
+    end
+
+    # Every archive in `dir` for `timezone`.
+    def self.archives(timezone:, dir: DEFAULT_DIR)
+      Dir.glob(File.join(dir, "usage-#{timezone}-*.json")).sort.filter_map do |path|
+        data = read(path, timezone)
+        next unless data
+
+        roots = data["roots"]
+        next if roots.size == 1 && SessionLoader.resolve_root(roots.first) == roots.first
+
+        Archive.new(
+          path: path,
+          roots: roots.map { |root| SessionLoader.resolve_root(root) }.uniq.sort,
+          complete_through: data["complete_through"],
+          rows: data["rows"],
+        )
+      end
+    end
+
+    # Parses a dataset file, or nil when it's unreadable, from another version
+    # or timezone, or malformed. Malformed rows are dropped.
+    def self.read(path, timezone)
+      data = JSON.parse(File.read(path))
+      return nil unless data.is_a?(Hash) &&
+        data["version"] == VERSION &&
+        data["roots"].is_a?(Array) && !data["roots"].empty? && data["roots"].all?(String) &&
+        data["timezone"] == timezone.to_s &&
+        DATE_PATTERN.match?(data["complete_through"].to_s) &&
+        data["rows"].is_a?(Array)
+
+      rows = data["rows"].select do |row|
+        row.is_a?(Hash) &&
+          row["project"].is_a?(String) &&
+          row["model"].is_a?(String) &&
+          DATE_PATTERN.match?(row["date"].to_s)
+      end
+      data.merge("rows" => rows)
+    rescue Errno::ENOENT, JSON::ParserError
+      nil
+    end
+
+    # Yields (project, date, model, Usage) for each persisted row.
+    def self.each_cell(rows)
+      rows.each do |row|
+        usage = Usage.new(
+          input: row["input"].to_i,
+          output: row["output"].to_i,
+          cache_read: row["cache_read"].to_i,
+          cache_write_5m: row["cache_write_5m"].to_i,
+          cache_write_1h: row["cache_write_1h"].to_i,
+        )
+        yield row.fetch("project"), row.fetch("date"), row.fetch("model"), usage
+      end
+    end
 
     # Last day (inclusive, "YYYY-MM-DD") whose data is fully persisted; nil
     # for a fresh (or unreadable) store.
@@ -35,8 +102,8 @@ module Clauditor
 
     # `now` is captured once at construction so a run that straddles midnight
     # never marks the day it started — only partially scanned — as complete.
-    def initialize(timezone:, root: nil, roots: nil, dir: DEFAULT_DIR, now: Time.now)
-      @roots = Array(roots || root).uniq.sort
+    def initialize(root:, timezone:, dir: DEFAULT_DIR, now: Time.now)
+      @root = root
       @timezone = timezone
       @dir = dir
       @today = day_of(now)
@@ -58,17 +125,8 @@ module Clauditor
 
     # Yields each persisted (project, date, model, Usage) cell for seeding
     # into an Aggregator.
-    def each_row
-      @rows.each do |row|
-        usage = Usage.new(
-          input: row["input"].to_i,
-          output: row["output"].to_i,
-          cache_read: row["cache_read"].to_i,
-          cache_write_5m: row["cache_write_5m"].to_i,
-          cache_write_1h: row["cache_write_1h"].to_i,
-        )
-        yield row.fetch("project"), row.fetch("date"), row.fetch("model"), usage
-      end
+    def each_row(&block)
+      Store.each_cell(@rows, &block)
     end
 
     # Replaces the dataset with every completed-day cell from this run's
@@ -80,7 +138,7 @@ module Clauditor
 
       payload = {
         version: VERSION,
-        roots: @roots,
+        roots: [ @root ],
         timezone: @timezone.to_s,
         complete_through: (Date.strptime(@today, "%Y-%m-%d") - 1).strftime("%Y-%m-%d"),
         rows: persistable.map { |row| serialize(row) },
@@ -92,8 +150,10 @@ module Clauditor
       File.rename(tmp, path)
     end
 
+    # The key hashes the root the same way the old root-set key hashed a
+    # one-root set, so datasets written before per-root storage still load.
     def path
-      key = @roots.join("\n")
+      key = @root
       File.join(@dir, "usage-#{@timezone}-#{Digest::SHA256.hexdigest(key)[0, 12]}.json")
     end
 
@@ -121,27 +181,10 @@ module Clauditor
     # Loads the dataset, treating anything unreadable or mismatched as empty —
     # the next save rebuilds it from a full scan.
     def load
-      data = JSON.parse(File.read(path))
-      return empty unless data.is_a?(Hash) &&
-        data["version"] == VERSION &&
-        data["roots"] == @roots &&
-        data["timezone"] == @timezone.to_s &&
-        DATE_PATTERN.match?(data["complete_through"].to_s) &&
-        data["rows"].is_a?(Array)
+      data = Store.read(path, @timezone)
+      return [ nil, [] ] unless data && data["roots"] == [ @root ]
 
-      rows = data["rows"].select do |row|
-        row.is_a?(Hash) &&
-          row["project"].is_a?(String) &&
-          row["model"].is_a?(String) &&
-          DATE_PATTERN.match?(row["date"].to_s)
-      end
-      [ data["complete_through"], rows ]
-    rescue Errno::ENOENT, JSON::ParserError
-      empty
-    end
-
-    def empty
-      [ nil, [] ]
+      [ data["complete_through"], data["rows"] ]
     end
   end
 end
