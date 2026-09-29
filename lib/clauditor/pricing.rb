@@ -27,10 +27,10 @@ module Clauditor
       "opus-4-7" => { input: 5.0, output: 25.0 },
       "opus-4-6" => { input: 5.0, output: 25.0 },
       "opus-4-5" => { input: 5.0, output: 25.0 },
-      "sonnet-5" => [
-        { until: "2026-08-31", input: 2.0, output: 10.0 },
-        { input: 3.0, output: 15.0 },
-      ],
+      "sonnet-5-5" => { input: 2.0, output: 10.0 },
+      # Launched at "introductory" $2/$10 through 2026-08-31; Anthropic later
+      # made that the standard price and cancelled the move to $3/$15.
+      "sonnet-5" => { input: 2.0, output: 10.0 },
       "sonnet-4-6" => { input: 3.0, output: 15.0 },
       "sonnet-4-5" => { input: 3.0, output: 15.0 },
       "haiku-4-5" => { input: 1.0, output: 5.0 },
