@@ -156,8 +156,8 @@ persistent dataset), so it lines up with the real checkout's totals.
 
 `remap_globs` is the same thing when the list of paths grows unwieldy: the left side is a glob
 pattern, so one line folds every worktree under a directory at once. `~` is expanded while glob
-characters are kept, `*` stays within a single path segment and `**/` spans directories, and the
-first pattern that matches wins. An exact `remap` entry always takes precedence over a glob.
+characters are kept, `*` stays within a single path segment, `**/` spans directories, wildcards
+cross dot-prefixed segments like `.git` and `.claude`, and the first pattern that matches wins. An exact `remap` entry always takes precedence over a glob.
 
 An unknown key, an invalid value (e.g. a bad `format`), or malformed YAML aborts with an error. A
 missing file is simply ignored.

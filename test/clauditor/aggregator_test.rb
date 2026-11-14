@@ -156,6 +156,16 @@ module Clauditor
       assert_equal [ "/first" ], agg.rows.map(&:project)
     end
 
+    def test_remap_glob_matches_across_dot_segments
+      # Worktree paths routinely pass through .git / .claude; wildcards must
+      # cross dot-prefixed segments (FNM_DOTMATCH), not skip them.
+      remap_globs = { "/private/tmp/hoo-*/**/*" => "/Users/me/games/tdf" }
+      agg = Aggregator.new(timezone: :utc, remap_globs: remap_globs)
+      agg.add(assistant(id: "a", cwd: "/private/tmp/hoo-2967-s2a-tester/.git/factory-brief"))
+
+      assert_equal [ "/Users/me/games/tdf" ], agg.rows.map(&:project)
+    end
+
     def test_remap_glob_is_idempotent_across_runs
       remap_globs = { "/private/tmp/wt/*" => "/Users/me/games/tdf" }
       # Second run: the first run's folded cells are seeded under the canonical

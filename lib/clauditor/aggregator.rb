@@ -147,8 +147,10 @@ module Clauditor
     # Folds a project onto the target of the first remap_globs pattern it
     # matches (config/insertion order); returns it unchanged when none match.
     # fnmatch with FNM_PATHNAME keeps `*` within a path segment and lets `**/`
-    # span directories, matching how worktree trees are globbed.
-    FNM_FLAGS = File::FNM_PATHNAME | File::FNM_EXTGLOB
+    # span directories, matching how worktree trees are globbed. FNM_DOTMATCH
+    # lets wildcards cross dot-prefixed segments — worktree paths routinely run
+    # through .git / .claude, which `*` would otherwise refuse to match.
+    FNM_FLAGS = File::FNM_PATHNAME | File::FNM_EXTGLOB | File::FNM_DOTMATCH
     def glob_remap(project)
       @remap_globs.each do |pattern, target|
         return target if File.fnmatch(pattern, project, FNM_FLAGS)
