@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-11-14
+
 ### Added
 
 - Add Fable 5.2 pricing: $8/$40 per MTok, with cache reads at a flat $0.20/MTok.
@@ -65,7 +67,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Persistent dataset under `~/.clauditor` so history survives Claude Code's transcript retention window.
 - `--version` option.
 
-[Unreleased]: https://github.com/MrJoy/clauditor/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/MrJoy/clauditor/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/MrJoy/clauditor/releases/tag/v0.0.5
 [0.0.4]: https://github.com/MrJoy/clauditor/releases/tag/v0.0.4
 [0.0.3]: https://github.com/MrJoy/clauditor/releases/tag/v0.0.3
 [0.0.2]: https://github.com/MrJoy/clauditor/releases/tag/v0.0.2
