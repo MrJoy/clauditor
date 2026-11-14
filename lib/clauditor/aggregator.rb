@@ -30,16 +30,21 @@ module Clauditor
     # remap is a user-supplied { project => project } hash (from the config
     # file) applied last, after the automatic worktree reattachment, to fold
     # stray project keys (typically long-gone worktrees) onto a canonical one.
+    # remap_globs is a { glob-pattern => project } hash applied after remap for
+    # any project no exact remap entry matched (so exact entries win); the first
+    # pattern that fnmatches, in insertion order, folds the project onto its
+    # target.
     # archived maps a root to the key of the Store archive covering it (the
     # archive's cells are seeded with that key as their root). An archive and
     # its roots' own cells each undercount the same usage — each may have lost
     # transcripts the other kept — so the merged rows take the larger of the
     # two per cell rather than their sum. rows(root:) is unaffected.
-    def initialize(timezone: :local, repo_root: ProjectNormalizer.method(:repo_root), skip_through: nil, remap: {}, archived: {})
+    def initialize(timezone: :local, repo_root: ProjectNormalizer.method(:repo_root), skip_through: nil, remap: {}, remap_globs: {}, archived: {})
       @timezone = timezone
       @repo_root = repo_root
       @skip_through = skip_through.is_a?(Hash) ? skip_through : Hash.new(skip_through)
       @remap = remap
+      @remap_globs = remap_globs
       @archived = archived
       @archive_keys = archived.values.to_h { |key| [ key, true ] }
       @repo_root_cache = {}
@@ -80,7 +85,9 @@ module Clauditor
       # absolute paths collapse to their repository root now.
       project = raw.start_with?("/") ? resolve_repo_root(raw) : raw
       @raw_projects[project] = true
-      @groups[[ root, project, day, model ]] += Usage.from_message_usage(usage)
+      message_usage = Usage.from_message_usage(usage)
+      message_usage = message_usage.as_long if Pricing.long_context?(model, message_usage, day)
+      @groups[[ root, project, day, model ]] += message_usage
     end
 
     # Injects an already-aggregated cell (from Store). Bypasses dedup and cwd
@@ -105,7 +112,8 @@ module Clauditor
         next unless root == :all || root == cell_root
 
         canonical = remap.fetch(project, project)
-        canonical = @remap.fetch(canonical, canonical)
+        # Exact remap wins; only an unmapped project is offered to the globs.
+        canonical = @remap.fetch(canonical) { glob_remap(canonical) }
         cell = [ canonical, date, model ]
         if root != :all
           merged[cell] += usage
@@ -135,6 +143,18 @@ module Clauditor
     end
 
     private
+
+    # Folds a project onto the target of the first remap_globs pattern it
+    # matches (config/insertion order); returns it unchanged when none match.
+    # fnmatch with FNM_PATHNAME keeps `*` within a path segment and lets `**/`
+    # span directories, matching how worktree trees are globbed.
+    FNM_FLAGS = File::FNM_PATHNAME | File::FNM_EXTGLOB
+    def glob_remap(project)
+      @remap_globs.each do |pattern, target|
+        return target if File.fnmatch(pattern, project, FNM_FLAGS)
+      end
+      project
+    end
 
     # "unknown" days are never considered covered: they can't be proven
     # complete, so they're recomputed live (and never persisted) every run.

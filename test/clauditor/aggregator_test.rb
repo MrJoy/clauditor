@@ -114,6 +114,61 @@ module Clauditor
       assert_equal 5, rows.first.usage.input
     end
 
+    def test_remap_glob_folds_matching_projects_onto_canonical
+      remap_globs = { "/private/tmp/wt/*" => "/Users/me/games/tdf" }
+      agg = Aggregator.new(timezone: :utc, remap_globs: remap_globs)
+      agg.add(assistant(id: "a", cwd: "/private/tmp/wt/a"))
+      agg.add(assistant(id: "b", cwd: "/private/tmp/wt/b"))
+
+      rows = agg.rows
+
+      assert_equal [ "/Users/me/games/tdf" ], rows.map(&:project)
+      assert_equal 200, rows.first.usage.input
+    end
+
+    def test_remap_glob_leaves_nonmatching_project_unchanged
+      remap_globs = { "/private/tmp/wt/*" => "/Users/me/games/tdf" }
+      agg = Aggregator.new(timezone: :utc, remap_globs: remap_globs)
+      agg.add(assistant(id: "a", cwd: "/Users/me/other"))
+
+      assert_equal [ "/Users/me/other" ], agg.rows.map(&:project)
+    end
+
+    def test_exact_remap_wins_over_glob
+      agg = Aggregator.new(
+        timezone: :utc,
+        remap: { "/private/tmp/wt/a" => "/exact" },
+        remap_globs: { "/private/tmp/wt/*" => "/glob" },
+      )
+      agg.add(assistant(id: "a", cwd: "/private/tmp/wt/a"))
+
+      assert_equal [ "/exact" ], agg.rows.map(&:project)
+    end
+
+    def test_first_matching_glob_wins
+      remap_globs = {
+        "/private/tmp/wt/*" => "/first",
+        "/private/tmp/**" => "/second",
+      }
+      agg = Aggregator.new(timezone: :utc, remap_globs: remap_globs)
+      agg.add(assistant(id: "a", cwd: "/private/tmp/wt/a"))
+
+      assert_equal [ "/first" ], agg.rows.map(&:project)
+    end
+
+    def test_remap_glob_is_idempotent_across_runs
+      remap_globs = { "/private/tmp/wt/*" => "/Users/me/games/tdf" }
+      # Second run: the first run's folded cells are seeded under the canonical
+      # target, which does not match the glob, so nothing re-folds.
+      agg = Aggregator.new(timezone: :utc, remap_globs: remap_globs)
+      agg.seed(project: "/Users/me/games/tdf", date: "2026-06-07", model: "opus-4-8", usage: Usage.new(input: 5))
+
+      rows = agg.rows
+
+      assert_equal [ "/Users/me/games/tdf" ], rows.map(&:project)
+      assert_equal 5, rows.first.usage.input
+    end
+
     def test_dated_and_undated_claude_models_collapse_into_one_row
       agg = Aggregator.new(timezone: :utc)
       agg.add(assistant(id: "a", cwd: "/Users/me/proj", model: "claude-haiku-4-5-20251001"))
@@ -246,6 +301,20 @@ module Clauditor
       agg.add(assistant(id: "a", cwd: "/Users/me/teak/carrot"))
 
       assert_equal [ "/Users/me/teak/carrot" ], agg.rows.map(&:project).uniq
+    end
+    def test_tracks_long_context_messages_separately_for_models_that_price_them
+      long_usage = default_usage.merge("cache_read_input_tokens" => 150_000)
+      agg = Aggregator.new(timezone: :utc)
+      agg.add(assistant(id: "a", cwd: "/Users/me/proj", model: "claude-haiku-5-5"))
+      agg.add(assistant(id: "b", cwd: "/Users/me/proj", model: "claude-haiku-5-5", usage: long_usage))
+      agg.add(assistant(id: "c", cwd: "/Users/me/proj", model: "claude-opus-4-8", usage: long_usage))
+
+      haiku, opus = agg.rows
+
+      assert_equal 151_000, haiku.usage.cache_read
+      assert_equal 150_000, haiku.usage.long.cache_read
+      assert_equal 100, haiku.usage.long.input
+      assert_nil opus.usage.long
     end
   end
 end
