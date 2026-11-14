@@ -142,6 +142,8 @@ since: "2026-01-01"            # with rollup: only rows on/after this date (mutu
 project: clauditor             # only projects whose path contains this substring
 remap:                         # fold stray project paths onto a canonical one
   /private/tmp/pr1887-rereview3: ~/Unity/Games/3DTDF2P
+remap_globs:                   # same, but the left side is a glob pattern
+  ~/Unity/Games/3DTDF2P/.claude/worktrees/*: ~/Unity/Games/3DTDF2P
 store: true                    # false is equivalent to --no-store
 store_dir: ~/.clauditor        # persistent dataset directory
 ```
@@ -152,6 +154,11 @@ checkout no longer exists on disk, so the usual repo-root detection can't fold i
 accept `~`. Each listed project's usage is merged into the target (and stays merged in the
 persistent dataset), so it lines up with the real checkout's totals.
 
+`remap_globs` is the same thing when the list of paths grows unwieldy: the left side is a glob
+pattern, so one line folds every worktree under a directory at once. `~` is expanded while glob
+characters are kept, `*` stays within a single path segment and `**/` spans directories, and the
+first pattern that matches wins. An exact `remap` entry always takes precedence over a glob.
+
 An unknown key, an invalid value (e.g. a bad `format`), or malformed YAML aborts with an error. A
 missing file is simply ignored.
 
@@ -161,6 +168,10 @@ Costs are estimates. Pricing is held per-model in USD/MTok, with cache multiplie
 5-minute cache write 1.25×, 1-hour cache write 2×). Non-Claude models (and synthetic ids) are left
 unpriced rather than guessed at, and render as `—` / blank / `null`. Token counts — not costs — are
 what gets persisted, so pricing updates apply retroactively on the next run.
+
+Haiku 5.5 bills a message at higher rates ($0.50/$2.50 instead of $0.10/$0.50) when its prompt,
+counting cached tokens, runs past 100k tokens. Clauditor decides this one message at a time as it
+reads transcripts and stores the long-prompt share of each day's tokens alongside the totals.
 
 ## Development
 

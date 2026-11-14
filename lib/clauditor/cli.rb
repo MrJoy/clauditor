@@ -40,6 +40,7 @@ module Clauditor
         timezone: options[:timezone],
         skip_through: stores.transform_values(&:complete_through),
         remap: options[:remap],
+        remap_globs: options[:remap_globs],
         archived: archives.flat_map { |archive| archive.roots.map { |root| [ root, archive.path ] } }.to_h,
       )
       stores.each do |root, store|
@@ -195,6 +196,7 @@ module Clauditor
         project: nil,
         model: nil,
         remap: {},
+        remap_globs: {},
         store: true,
         store_dir: Store::DEFAULT_DIR,
       }.merge(Config.load(path: config_path))
