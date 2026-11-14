@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Add Fable 5.2 pricing: $8/$40 per MTok, with cache reads at a flat $0.20/MTok.
 - Add a `remap_globs` config key: like `remap`, but the project path on the left is a glob pattern, so one line folds every worktree under a directory onto a canonical checkout. `~` expands while glob characters are kept; `*` stays within a path segment, `**/` spans directories, and wildcards cross dot-prefixed segments like `.git`/`.claude`; the first matching pattern wins and an exact `remap` entry always takes precedence.
 - Add Haiku 5.5 pricing: $0.10/$0.50 per MTok for prompts up to 100k tokens, $0.50/$2.50 above that. A prompt's size counts cache reads and writes. Each message is checked as it's read, and the stored dataset keeps the long-prompt share of a day's tokens next to the totals so the higher rate still applies on later runs.
 

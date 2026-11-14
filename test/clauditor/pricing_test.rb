@@ -134,6 +134,23 @@ module Clauditor
         %w[opus-5 fable-5 opus-4-8 opus-4-7].sort_by { |model| Pricing.sort_key(model) }
     end
 
+    def test_cost_for_applies_fable_5_2_rates_with_flat_cache_read_rate
+      usage = Usage.new(input: 1_000_000, output: 1_000_000, cache_read: 1_000_000,
+        cache_write_5m: 1_000_000, cache_write_1h: 1_000_000)
+
+      # Fable 5.2: $8/$40 per MTok, cache reads a flat $0.20/MTok (not 0.1x).
+      expected = 8.0 + 40.0 + 0.20 + (8.0 * 1.25) + (8.0 * 2.0)
+
+      assert_in_delta expected, Pricing.cost_for("claude-fable-5-2", usage), 1e-9
+    end
+
+    def test_known_and_sort_key_place_fable_5_2_after_fable_5_1
+      assert Pricing.known?("claude-fable-5-2")
+      assert_equal [ 3, "fable", [ 5, 2 ] ], Pricing.sort_key("claude-fable-5-2")
+      assert_equal %w[fable-5 fable-5-1 fable-5-2],
+        %w[fable-5-2 fable-5 fable-5-1].sort_by { |model| Pricing.sort_key(model) }
+    end
+
     def test_cost_for_applies_fable_5_1_rates_with_flat_cache_read_rate
       usage = Usage.new(input: 1_000_000, output: 1_000_000, cache_read: 1_000_000,
         cache_write_5m: 1_000_000, cache_write_1h: 1_000_000)
@@ -166,6 +183,40 @@ module Clauditor
       assert_equal [ 2, "opus", [ 5, 5 ] ], Pricing.sort_key("claude-opus-5-5")
       assert_equal %w[opus-4-8 opus-5 opus-5-5 fable-5-1],
         %w[fable-5-1 opus-5-5 opus-4-8 opus-5].sort_by { |model| Pricing.sort_key(model) }
+    end
+    def test_cost_for_applies_haiku_5_5_base_rates
+      usage = Usage.new(input: 1_000_000, output: 1_000_000, cache_read: 1_000_000, cache_write_1h: 1_000_000)
+
+      expected = 0.10 + 0.50 + (0.10 * 0.1) + (0.10 * 2.0)
+
+      assert_in_delta expected, Pricing.cost_for("claude-haiku-5-5", usage), 1e-9
+    end
+
+    def test_cost_for_bills_the_long_context_portion_at_long_context_rates
+      short = Usage.new(input: 1_000_000, output: 1_000_000)
+      long = Usage.new(input: 1_000_000, output: 1_000_000, cache_read: 1_000_000, cache_write_5m: 1_000_000).as_long
+
+      expected =
+        0.10 + 0.50 +                                  # short prompts
+        0.50 + 2.50 + (0.50 * 0.1) + (0.50 * 1.25)     # prompts over 100k
+
+      assert_in_delta expected, Pricing.cost_for("claude-haiku-5-5", short + long), 1e-9
+    end
+
+    def test_cost_for_ignores_a_long_context_portion_on_models_without_one
+      usage = Usage.new(input: 1_000_000).as_long
+
+      assert_in_delta 5.0, Pricing.cost_for("claude-opus-4-8", usage), 1e-9
+    end
+
+    def test_long_context_requires_a_prompt_over_the_threshold
+      at = Usage.new(input: 10_000, cache_read: 80_000, cache_write_5m: 10_000)
+      over = Usage.new(input: 10_001, cache_read: 80_000, cache_write_5m: 10_000)
+
+      refute Pricing.long_context?("haiku-5-5", at)
+      assert Pricing.long_context?("haiku-5-5", over)
+      refute Pricing.long_context?("opus-4-8", Usage.new(input: 900_000))
+      refute Pricing.long_context?("qwen3.6:27b-coding-nvfp4", Usage.new(input: 900_000))
     end
   end
 end

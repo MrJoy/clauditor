@@ -55,6 +55,27 @@ module Clauditor
       end
     end
 
+    def test_save_and_reload_roundtrips_the_long_context_portion
+      Dir.mktmpdir do |dir|
+        long = Usage.new(input: 7, output: 6, cache_read: 5, cache_write_5m: 4, cache_write_1h: 3).as_long
+        build(dir).save([ row.tap { |r| r.usage += long } ])
+
+        _, _, _, usage = cells(build(dir)).first
+        assert_equal 107, usage.input
+        assert_equal [ 7, 6, 5, 4, 3 ],
+          [ usage.long.input, usage.long.output, usage.long.cache_read, usage.long.cache_write_5m, usage.long.cache_write_1h ]
+      end
+    end
+
+    def test_rows_without_a_long_context_portion_reload_without_one
+      Dir.mktmpdir do |dir|
+        build(dir).save([ row ])
+
+        _, _, _, usage = cells(build(dir)).first
+        assert_nil usage.long
+      end
+    end
+
     def test_save_excludes_today_and_unknown_dates
       Dir.mktmpdir do |dir|
         build(dir).save([

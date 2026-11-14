@@ -8,15 +8,22 @@ module Clauditor
   # `cache_creation` (`ephemeral_5m_input_tokens` / `ephemeral_1h_input_tokens`).
   # We keep the split because 5-minute and 1-hour cache writes are priced
   # differently; the `cache_write` accessor re-sums them for display.
+  #
+  # Some models bill a whole message at higher rates once its prompt passes a
+  # size threshold (see Pricing.long_context?). That's a per-message fact a
+  # summed cell can't recover, so `long` carries the share of these totals
+  # that came from such messages, or nil when there was none. It's a subset,
+  # already counted in the top-level dimensions.
   class Usage
-    attr_reader :input, :output, :cache_read, :cache_write_5m, :cache_write_1h
+    attr_reader :input, :output, :cache_read, :cache_write_5m, :cache_write_1h, :long
 
-    def initialize(input: 0, output: 0, cache_read: 0, cache_write_5m: 0, cache_write_1h: 0)
+    def initialize(input: 0, output: 0, cache_read: 0, cache_write_5m: 0, cache_write_1h: 0, long: nil)
       @input = input
       @output = output
       @cache_read = cache_read
       @cache_write_5m = cache_write_5m
       @cache_write_1h = cache_write_1h
+      @long = long
     end
 
     # Builds a Usage from a raw `message.usage` hash.
@@ -49,6 +56,30 @@ module Clauditor
       input + output + cache_read + cache_write
     end
 
+    # Every token the model read, cached or not: what a long-context
+    # threshold measures.
+    def prompt
+      input + cache_read + cache_write
+    end
+
+    # This same usage, marked as wholly long-context.
+    def as_long
+      self.class.new(
+        input: input,
+        output: output,
+        cache_read: cache_read,
+        cache_write_5m: cache_write_5m,
+        cache_write_1h: cache_write_1h,
+        long: self.class.new(
+          input: input,
+          output: output,
+          cache_read: cache_read,
+          cache_write_5m: cache_write_5m,
+          cache_write_1h: cache_write_1h,
+        ),
+      )
+    end
+
     def +(other)
       self.class.new(
         input: input + other.input,
@@ -56,6 +87,19 @@ module Clauditor
         cache_read: cache_read + other.cache_read,
         cache_write_5m: cache_write_5m + other.cache_write_5m,
         cache_write_1h: cache_write_1h + other.cache_write_1h,
+        long: long && other.long ? long + other.long : long || other.long,
+      )
+    end
+
+    # Per-dimension difference, with no long-context portion. Pricing uses
+    # `usage - usage.long` for the share billed at base rates.
+    def -(other)
+      self.class.new(
+        input: input - other.input,
+        output: output - other.output,
+        cache_read: cache_read - other.cache_read,
+        cache_write_5m: cache_write_5m - other.cache_write_5m,
+        cache_write_1h: cache_write_1h - other.cache_write_1h,
       )
     end
 
@@ -68,6 +112,7 @@ module Clauditor
         cache_read: [ cache_read, other.cache_read ].max,
         cache_write_5m: [ cache_write_5m, other.cache_write_5m ].max,
         cache_write_1h: [ cache_write_1h, other.cache_write_1h ].max,
+        long: long && other.long ? long.max(other.long) : long || other.long,
       )
     end
   end

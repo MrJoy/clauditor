@@ -53,5 +53,33 @@ module Clauditor
 
       assert_equal 1 + 2 + 3 + 4 + 5, usage.total
     end
+    def test_long_context_portion_survives_addition_and_max
+      short = Usage.new(input: 1, output: 2, cache_read: 3)
+      long = Usage.new(input: 10, output: 20, cache_read: 30).as_long
+
+      sum = short + long
+      assert_equal 11, sum.input
+      assert_equal 10, sum.long.input
+      assert_equal 20, sum.long.output
+      assert_nil short.long
+
+      bigger = sum.max(Usage.new(input: 50))
+      assert_equal 50, bigger.input
+      assert_equal 10, bigger.long.input
+    end
+
+    def test_subtraction_removes_each_dimension
+      diff = Usage.new(input: 11, output: 22, cache_read: 33, cache_write_5m: 44, cache_write_1h: 55) -
+        Usage.new(input: 1, output: 2, cache_read: 3, cache_write_5m: 4, cache_write_1h: 5)
+
+      assert_equal [ 10, 20, 30, 40, 50 ],
+        [ diff.input, diff.output, diff.cache_read, diff.cache_write_5m, diff.cache_write_1h ]
+    end
+
+    def test_prompt_counts_input_and_cache_tokens
+      usage = Usage.new(input: 1, output: 2, cache_read: 3, cache_write_5m: 4, cache_write_1h: 5)
+
+      assert_equal 1 + 3 + 4 + 5, usage.prompt
+    end
   end
 end

@@ -7,8 +7,15 @@ module Clauditor
   # Rates track Anthropic's published list pricing. Cache reads bill at 0.1x
   # the base input rate; 5-minute cache writes at 1.25x; 1-hour writes at 2x.
   # A rate hash may carry an explicit `cache_read:` USD/MTok rate for models
-  # whose cache reads don't follow the 0.1x rule (fable-5-1 lists $0.25,
-  # opus-5-5 lists $0.20).
+  # whose cache reads don't follow the 0.1x rule (fable-5-2 and opus-5-5 list
+  # $0.20, fable-5-1 lists $0.25).
+  #
+  # A rate hash may also carry a `long_context:` hash for models that bill a
+  # whole message at higher rates once its prompt (input plus cache reads and
+  # writes) exceeds `above:` tokens. Its `input:`/`output:` (and optional
+  # `cache_read:`) replace the base rates for those messages; the cache
+  # multipliers apply as usual. The Aggregator tags such messages as it reads
+  # them (see Usage#long), since a summed cell can't tell them apart.
   #
   # A model's value is normally a flat `{ input:, output: }` rate hash. When a
   # model's list price changes on a known date, its value is instead an array
@@ -19,6 +26,7 @@ module Clauditor
     # Base input/output rates in USD per million tokens, keyed by the
     # normalized model id (see .normalize_model — no "claude-" prefix, no date).
     RATES = {
+      "fable-5-2" => { input: 8.0, output: 40.0, cache_read: 0.20 },
       "fable-5-1" => { input: 10.0, output: 50.0, cache_read: 0.25 },
       "fable-5" => { input: 10.0, output: 50.0 },
       "opus-5-5" => { input: 4.0, output: 20.0, cache_read: 0.20 },
@@ -33,6 +41,7 @@ module Clauditor
       "sonnet-5" => { input: 2.0, output: 10.0 },
       "sonnet-4-6" => { input: 3.0, output: 15.0 },
       "sonnet-4-5" => { input: 3.0, output: 15.0 },
+      "haiku-5-5" => { input: 0.10, output: 0.50, long_context: { above: 100_000, input: 0.50, output: 2.50 } },
       "haiku-4-5" => { input: 1.0, output: 5.0 },
     }.freeze
 
@@ -88,14 +97,28 @@ module Clauditor
       tiers.find { |tier| tier[:until].nil? || date <= tier[:until] }
     end
 
+    # Whether one message's usage bills at the model's long-context rates.
+    def long_context?(model, usage, date = nil)
+      threshold = rates_for(model, date)&.dig(:long_context, :above)
+      !threshold.nil? && usage.prompt > threshold
+    end
+
     # USD cost for a Usage under the given model on the given day, or nil when
     # we have no rates for that model (e.g. local or synthetic models). The day
     # ("YYYY-MM-DD") selects the active rate tier for models whose list price
-    # changes over time.
+    # changes over time. The usage's long-context portion bills at the
+    # model's long-context rates, when it has them.
     def cost_for(model, usage, date = nil)
       rates = rates_for(model, date)
       return nil unless rates
 
+      long_rates = rates[:long_context]
+      return price(rates, usage) unless long_rates && usage.long
+
+      price(rates, usage - usage.long) + price(long_rates, usage.long)
+    end
+
+    def price(rates, usage)
       input_rate = rates[:input]
       cache_read_rate = rates.fetch(:cache_read) { input_rate * CACHE_READ_MULTIPLIER }
       (

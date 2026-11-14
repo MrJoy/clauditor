@@ -85,15 +85,21 @@ module Clauditor
     # Yields (project, date, model, Usage) for each persisted row.
     def self.each_cell(rows)
       rows.each do |row|
-        usage = Usage.new(
-          input: row["input"].to_i,
-          output: row["output"].to_i,
-          cache_read: row["cache_read"].to_i,
-          cache_write_5m: row["cache_write_5m"].to_i,
-          cache_write_1h: row["cache_write_1h"].to_i,
-        )
+        long = row["long"]
+        usage = usage_from(row, long: long.is_a?(Hash) ? usage_from(long) : nil)
         yield row.fetch("project"), row.fetch("date"), row.fetch("model"), usage
       end
+    end
+
+    def self.usage_from(fields, long: nil)
+      Usage.new(
+        input: fields["input"].to_i,
+        output: fields["output"].to_i,
+        cache_read: fields["cache_read"].to_i,
+        cache_write_5m: fields["cache_write_5m"].to_i,
+        cache_write_1h: fields["cache_write_1h"].to_i,
+        long: long,
+      )
     end
 
     # Last day (inclusive, "YYYY-MM-DD") whose data is fully persisted; nil
@@ -159,12 +165,16 @@ module Clauditor
 
     private
 
+    # The long-context portion (see Usage#long) is written only when present,
+    # so rows for models without one keep their old shape.
     def serialize(row)
-      usage = row.usage
+      fields = { project: row.project, date: row.date, model: row.model }.merge(token_fields(row.usage))
+      fields[:long] = token_fields(row.usage.long) if row.usage.long
+      fields
+    end
+
+    def token_fields(usage)
       {
-        project: row.project,
-        date: row.date,
-        model: row.model,
         input: usage.input,
         output: usage.output,
         cache_read: usage.cache_read,
