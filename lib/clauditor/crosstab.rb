@@ -183,7 +183,7 @@ module Clauditor
     module Csv
       module_function
 
-      METRICS = [ "Input", "Output", "Cache Write", "Cache Read", "Cost" ].freeze
+      METRICS = [ "Input", "Cache Read", "Output", "Cache Write", "Cost" ].freeze
 
       # verbose and hide_project are accepted for a uniform interface but
       # ignored — CSV always carries full-precision numbers and the project
@@ -209,7 +209,7 @@ module Clauditor
         return Array.new(METRICS.size) unless cell
 
         usage = cell.usage
-        [ usage.input, usage.output, usage.cache_write, usage.cache_read, format("%.4f", cell.cost) ]
+        [ usage.input, usage.cache_read, usage.output, usage.cache_write, format("%.4f", cell.cost) ]
       end
     end
   end

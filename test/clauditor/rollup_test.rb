@@ -113,7 +113,7 @@ module Clauditor
 
       table = CSV.parse(Rollup::Csv.render(rows), headers: true)
 
-      assert_equal %w[project model input_tokens output_tokens cache_creation_tokens cache_read_tokens total_tokens cost_usd], table.headers
+      assert_equal %w[project model input_tokens cache_read_tokens output_tokens cache_creation_tokens total_tokens cost_usd], table.headers
       refute_includes table.headers, "date"
       assert_equal 1, table.size
       assert_equal "150", table.first["input_tokens"]

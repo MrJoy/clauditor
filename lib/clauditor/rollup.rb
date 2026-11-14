@@ -47,7 +47,7 @@ module Clauditor
     module Table
       module_function
 
-      NUMERIC_HEADERS = [ "Input", "Output", "Cache Write", "Cache Read", "Cost" ].freeze
+      NUMERIC_HEADERS = [ "Input", "Cache Read", "Output", "Cache Write", "Cost" ].freeze
 
       # Token counts are abbreviated with k/m/b suffixes unless verbose (costs are
       # always shown in full), matching the --anthropic crosstab. hide_project /
@@ -89,9 +89,9 @@ module Clauditor
         labels << row.model unless drop_model
         labels + [
           tokens(row.usage.input, verbose),
+          tokens(row.usage.cache_read, verbose),
           tokens(row.usage.output, verbose),
           tokens(row.usage.cache_write, verbose),
-          tokens(row.usage.cache_read, verbose),
           Formatters.cost_cell(row.cost),
         ]
       end
@@ -103,9 +103,9 @@ module Clauditor
         labels = [ "TOTAL" ] + Array.new(label_cols - 1, "")
         labels + [
           tokens(usage.input, verbose),
+          tokens(usage.cache_read, verbose),
           tokens(usage.output, verbose),
           tokens(usage.cache_write, verbose),
-          tokens(usage.cache_read, verbose),
           Formatters.cost_cell(cost),
         ]
       end
@@ -131,9 +131,9 @@ module Clauditor
             "project",
             "model",
             "input_tokens",
+            "cache_read_tokens",
             "output_tokens",
             "cache_creation_tokens",
-            "cache_read_tokens",
             "total_tokens",
             "cost_usd",
           ]
@@ -142,9 +142,9 @@ module Clauditor
               ProjectNormalizer.display(row.project),
               row.model,
               row.usage.input,
+              row.usage.cache_read,
               row.usage.output,
               row.usage.cache_write,
-              row.usage.cache_read,
               row.usage.total,
               row.cost.nil? ? nil : format("%.4f", row.cost),
             ]
@@ -168,9 +168,9 @@ module Clauditor
             project: ProjectNormalizer.display(row.project),
             model: row.model,
             input_tokens: row.usage.input,
+            cache_read_tokens: row.usage.cache_read,
             output_tokens: row.usage.output,
             cache_creation_tokens: row.usage.cache_write,
-            cache_read_tokens: row.usage.cache_read,
             total_tokens: row.usage.total,
             cost_usd: row.cost.nil? ? nil : row.cost.round(4),
             priced: row.priced?,

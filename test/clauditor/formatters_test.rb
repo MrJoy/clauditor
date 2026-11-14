@@ -74,8 +74,8 @@ module Clauditor
       output = Formatters::Csv.render(rows)
       table = CSV.parse(output, headers: true)
 
-      assert_equal %w[project date model input_tokens output_tokens cache_creation_tokens
-        cache_read_tokens total_tokens cost_usd], table.headers
+      assert_equal %w[project date model input_tokens cache_read_tokens output_tokens
+        cache_creation_tokens total_tokens cost_usd], table.headers
       priced = table.find { |r| r["model"] == "opus-4-8" }
       unpriced = table.find { |r| r["model"] == "qwen3.6:27b-coding-nvfp4" }
 

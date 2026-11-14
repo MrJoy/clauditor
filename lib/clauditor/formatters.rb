@@ -72,7 +72,7 @@ module Clauditor
     module Table
       module_function
 
-      NUMERIC_HEADERS = [ "Input", "Output", "Cache Write", "Cache Read", "Cost" ].freeze
+      NUMERIC_HEADERS = [ "Input", "Cache Read", "Output", "Cache Write", "Cost" ].freeze
 
       # When hide_project / hide_model are set the corresponding leading label
       # column is dropped — used when the output has been filtered to a single
@@ -111,9 +111,9 @@ module Clauditor
         labels << row.model unless hide_model
         labels + [
           Formatters.delimit(row.usage.input),
+          Formatters.delimit(row.usage.cache_read),
           Formatters.delimit(row.usage.output),
           Formatters.delimit(row.usage.cache_write),
-          Formatters.delimit(row.usage.cache_read),
           Formatters.cost_cell(row.cost),
         ]
       end
@@ -125,9 +125,9 @@ module Clauditor
         labels = [ "TOTAL" ] + Array.new(label_cols - 1, "")
         labels + [
           Formatters.delimit(usage.input),
+          Formatters.delimit(usage.cache_read),
           Formatters.delimit(usage.output),
           Formatters.delimit(usage.cache_write),
-          Formatters.delimit(usage.cache_read),
           Formatters.cost_cell(priced),
         ]
       end
@@ -145,8 +145,8 @@ module Clauditor
         CSV.generate do |csv|
           csv << [
             "project", "date", "model",
-            "input_tokens", "output_tokens",
-            "cache_creation_tokens", "cache_read_tokens",
+            "input_tokens", "cache_read_tokens",
+            "output_tokens", "cache_creation_tokens",
             "total_tokens", "cost_usd"
           ]
           rows.each do |row|
@@ -155,9 +155,9 @@ module Clauditor
               row.date,
               row.model,
               row.usage.input,
+              row.usage.cache_read,
               row.usage.output,
               row.usage.cache_write,
-              row.usage.cache_read,
               row.usage.total,
               row.cost.nil? ? nil : format("%.4f", row.cost),
             ]
@@ -181,9 +181,9 @@ module Clauditor
             date: row.date,
             model: row.model,
             input_tokens: row.usage.input,
+            cache_read_tokens: row.usage.cache_read,
             output_tokens: row.usage.output,
             cache_creation_tokens: row.usage.cache_write,
-            cache_read_tokens: row.usage.cache_read,
             total_tokens: row.usage.total,
             cost_usd: row.cost.nil? ? nil : row.cost.round(4),
             priced: row.priced?,
