@@ -55,6 +55,8 @@ module Clauditor
           options[:model] = value&.to_s
         when "remap"
           options[:remap] = remap(value, path)
+        when "remap_globs"
+          options[:remap_globs] = remap(value, path, key: "remap_globs")
         when "store"
           options[:store] = boolean(value, "store", path)
         when "store_dir"
@@ -81,12 +83,12 @@ module Clauditor
     # repo-root walk can no longer resolve — onto a canonical project. Both
     # sides are expanded so `~` works; the source should be the project path as
     # it appears in the report.
-    def self.remap(value, path)
-      raise ArgumentError, "#{path}: 'remap' must be a mapping of project => project" unless value.is_a?(Hash)
+    def self.remap(value, path, key: "remap")
+      raise ArgumentError, "#{path}: '#{key}' must be a mapping of project => project" unless value.is_a?(Hash)
 
       value.each_with_object({}) do |(from, to), mapping|
         unless from.is_a?(String) && to.is_a?(String) && !from.strip.empty? && !to.strip.empty?
-          raise ArgumentError, "#{path}: 'remap' entries must map a path to a non-empty path"
+          raise ArgumentError, "#{path}: '#{key}' entries must map a path to a non-empty path"
         end
 
         mapping[File.expand_path(from)] = File.expand_path(to)

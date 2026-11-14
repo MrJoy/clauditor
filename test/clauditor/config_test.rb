@@ -65,6 +65,33 @@ module Clauditor
       end
     end
 
+    def test_remap_globs_expands_both_sides_and_keeps_metacharacters
+      with_config(<<~YAML) do |path|
+        remap_globs:
+          ~/Unity/Games/3DTDF2P/.claude/worktrees/*: ~/Unity/Games/3DTDF2P
+      YAML
+        remap_globs = Config.load(path: path)[:remap_globs]
+
+        pattern = File.expand_path("~/Unity/Games/3DTDF2P/.claude/worktrees/*")
+        assert pattern.end_with?("/*"), "glob metacharacter should survive expand_path"
+        assert_equal File.expand_path("~/Unity/Games/3DTDF2P"), remap_globs[pattern]
+      end
+    end
+
+    def test_remap_globs_non_mapping_raises
+      with_config("remap_globs: just-a-string\n") do |path|
+        error = assert_raises(ArgumentError) { Config.load(path: path) }
+        assert_includes error.message, "must be a mapping"
+      end
+    end
+
+    def test_remap_globs_empty_target_raises
+      with_config("remap_globs:\n  \"/a/*\": \"\"\n") do |path|
+        error = assert_raises(ArgumentError) { Config.load(path: path) }
+        assert_includes error.message, "non-empty path"
+      end
+    end
+
     def test_remap_non_mapping_raises
       with_config("remap: just-a-string\n") do |path|
         error = assert_raises(ArgumentError) { Config.load(path: path) }
